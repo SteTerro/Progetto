@@ -16,4 +16,5 @@ dependencies = [
     "sktime>=0.34.0",
     "statsforecast>=1.7.8",
     "streamlit>=1.40.1",
+    "vega-datasets>=0.9.0",
 ]

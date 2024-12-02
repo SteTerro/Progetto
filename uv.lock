@@ -996,6 +996,7 @@ dependencies = [
     { name = "sktime" },
     { name = "statsforecast" },
     { name = "streamlit" },
+    { name = "vega-datasets" },
 ]
 
 [package.metadata]
@@ -1011,6 +1012,7 @@ requires-dist = [
     { name = "sktime", specifier = ">=0.34.0" },
     { name = "statsforecast", specifier = ">=1.7.8" },
     { name = "streamlit", specifier = ">=1.40.1" },
+    { name = "vega-datasets", specifier = ">=0.9.0" },
 ]
 
 [[package]]
@@ -1649,6 +1651,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/18/b0/c5a3ef13b537515e57c865549f1c4d19837c6d5531109efec05becd1890a/utilsforecast-0.2.9.tar.gz", hash = "sha256:f6e0515637d5f6556327e3b1784a3dc190c7a193b9419aca029e1395d099215c", size = 40973 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/c0/dc/75080416c546291c378b2651633a14900e950267183a05d9522f94ae9aec/utilsforecast-0.2.9-py3-none-any.whl", hash = "sha256:684398bb8d6e460d53aa2a7c8b9f4256573d61fcd387fc2ecc193f8b5328cab9", size = 41682 },
+]
+
+[[package]]
+name = "vega-datasets"
+version = "0.9.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pandas" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/8f/a0/ce608d9a5b82fce2ebaa2311136b1e1d1dc2807f501bbdfa56bd174fff76/vega_datasets-0.9.0.tar.gz", hash = "sha256:9dbe9834208e8ec32ab44970df315de9102861e4cda13d8e143aab7a80d93fc0", size = 215013 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e6/9f/ca52771fe972e0dcc5167fedb609940e01516066938ff2ee28b273ae4f29/vega_datasets-0.9.0-py3-none-any.whl", hash = "sha256:3d7c63917be6ca9b154b565f4779a31fedce57b01b5b9d99d8a34a7608062a1d", size = 210822 },
 ]
 
 [[package]]

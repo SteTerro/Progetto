@@ -1,6 +1,7 @@
 import streamlit as st
 import polars as pl
 import pandas as pd
+import altair as alt
 
 st.write("""
 # Produzione energetica in Europa
@@ -75,6 +76,7 @@ st.write("""
 
 countries = df.select("unique_id").unique().sort("unique_id")
 
+
 selected_country = st.multiselect(
     "Seleziona uno stato",
     countries,
@@ -88,6 +90,17 @@ st.line_chart(
     color="unique_id"
 )
 
+from vega_datasets import data
+
+source = alt.topo_feature(data.world_110m.url, 'countries')
+param_projection = alt.param(value="equalEarth")
+
+alt.Chart(source, width=500, height=300).mark_geoshape(
+    fill='lightgray',
+    stroke='gray'
+).project(
+    type=alt.expr(param_projection.name)
+).add_params(param_projection)
 st.write("""
 ## Quali sono gli stati più inquinati in un dato anno?
 """)
