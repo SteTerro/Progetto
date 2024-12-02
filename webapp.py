@@ -90,19 +90,8 @@ st.line_chart(
     color="unique_id"
 )
 
-from vega_datasets import data
-
-source = alt.topo_feature(data.world_110m.url, 'countries')
-param_projection = alt.param(value="equalEarth")
-
-alt.Chart(source, width=500, height=300).mark_geoshape(
-    fill='lightgray',
-    stroke='gray'
-).project(
-    type=alt.expr(param_projection.name)
-).add_params(param_projection)
 st.write("""
-## Quali sono gli stati più inquinati in un dato anno?
+## Quali sono le previsioni per la produzione di energia?
 """)
 
 #countries2 = df.select("unique_id").unique().sort("unique_id")
@@ -164,3 +153,66 @@ st.line_chart(
     y = "y",
     color="unique_id"
 )
+
+from vega_datasets import data
+import pycountry
+
+source = alt.topo_feature(data.world_110m.url, 'countries')
+param_projection = alt.param(value="equalEarth")
+
+prova1 = alt.Chart(source, width=500, height=300).mark_geoshape(
+    fill='lightgray',
+    stroke='gray'
+).project(
+    type=alt.expr(param_projection.name)
+).add_params(param_projection)
+
+lista = [43, 32, 359, 385, 357, 420, 45, 372, 358, 33, 49, 30, 36, 353, 39, 371, 370, 352, 356, 31, 48, 315, 40, 421, 386, 34, 46]
+
+prova2 = alt.Chart(source).mark_geoshape(
+    fill='#666666',
+    stroke='white'
+).project(
+    type= 'mercator',
+    scale= 350,                          # Magnify
+    center= [20,50],                     # [lon, lat]
+    clipExtent= [[0, 0], [400, 300]],    # [[left, top], [right, bottom]]
+).properties(
+    title='Europe (Mercator)',
+    width=400, height=300
+)
+
+def convert_iso_to_numeric(iso_code):
+    try:
+        return pycountry.countries.lookup(iso_code).numeric
+    except LookupError:
+        return None
+
+st.write(df)
+countries = alt.topo_feature(data.world_110m.url, 'countries')
+source = df.filter(pl.col("ds") == pl.lit("2024-01-01").str.to_date())
+
+min_value = df["y"].min()
+max_value = df["y"].max()
+
+prova3 = alt.Chart(source).mark_geoshape(
+    stroke='gray'
+).project(
+    type= 'mercator',
+).properties(
+    title='Europe (Mercator)',
+).encode(
+    color=alt.Color('y:Q', sort="descending", 
+                    scale=alt.Scale(
+                        scheme='inferno', 
+                        domain=(min_value,max_value)), 
+                        legend=alt.Legend(title="", tickCount=6))
+).transform_lookup(
+    lookup='unique_id',
+    from_=alt.LookupData(source, 'unique_id', ['y'])
+)
+
+
+prova1
+prova2
+prova3 

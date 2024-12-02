@@ -12,6 +12,7 @@ dependencies = [
     "pmdarima>=2.0.4",
     "polars>=1.14.0",
     "pyarrow>=18.0.0",
+    "pycountry>=24.6.1",
     "seaborn>=0.13.2",
     "sktime>=0.34.0",
     "statsforecast>=1.7.8",

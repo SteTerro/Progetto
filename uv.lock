@@ -992,6 +992,7 @@ dependencies = [
     { name = "pmdarima" },
     { name = "polars" },
     { name = "pyarrow" },
+    { name = "pycountry" },
     { name = "seaborn" },
     { name = "sktime" },
     { name = "statsforecast" },
@@ -1008,6 +1009,7 @@ requires-dist = [
     { name = "pmdarima", specifier = ">=2.0.4" },
     { name = "polars", specifier = ">=1.14.0" },
     { name = "pyarrow", specifier = ">=18.0.0" },
+    { name = "pycountry", specifier = ">=24.6.1" },
     { name = "seaborn", specifier = ">=0.13.2" },
     { name = "sktime", specifier = ">=0.34.0" },
     { name = "statsforecast", specifier = ">=1.7.8" },
@@ -1065,6 +1067,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/fb/40/4c27579387917f55ce55f136fb20ce53bfe8c9809c2e2d864e5ec044330a/pyarrow-18.0.0-cp39-cp39-manylinux_2_28_aarch64.whl", hash = "sha256:3ac24b2be732e78a5a3ac0b3aa870d73766dd00beba6e015ea2ea7394f8b4e55", size = 38602611 },
     { url = "https://files.pythonhosted.org/packages/aa/ab/55bd58856c33f58de2afc05273bc036f8b353efae1fde9cdfff510457a20/pyarrow-18.0.0-cp39-cp39-manylinux_2_28_x86_64.whl", hash = "sha256:b30a927c6dff89ee702686596f27c25160dd6c99be5bcc1513a763ae5b1bfc03", size = 40036804 },
     { url = "https://files.pythonhosted.org/packages/d2/77/a5021212460133ce9c4cc2da5d5b3ecd3bc84cf06d772bf0ceaf42c5c24c/pyarrow-18.0.0-cp39-cp39-win_amd64.whl", hash = "sha256:8f40ec677e942374e3d7f2fad6a67a4c2811a8b975e8703c6fd26d3b168a90e2", size = 25111132 },
+]
+
+[[package]]
+name = "pycountry"
+version = "24.6.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/76/57/c389fa68c50590881a75b7883eeb3dc15e9e73a0fdc001cdd45c13290c92/pycountry-24.6.1.tar.gz", hash = "sha256:b61b3faccea67f87d10c1f2b0fc0be714409e8fcdcc1315613174f6466c10221", size = 6043910 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b1/ec/1fb891d8a2660716aadb2143235481d15ed1cbfe3ad669194690b0604492/pycountry-24.6.1-py3-none-any.whl", hash = "sha256:f1a4fb391cd7214f8eefd39556d740adcc233c778a27f8942c8dca351d6ce06f", size = 6335189 },
 ]
 
 [[package]]
