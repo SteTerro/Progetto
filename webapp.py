@@ -2,8 +2,14 @@ import streamlit as st
 import polars as pl
 import pandas as pd
 import altair as alt
+<<<<<<< HEAD
 #Per uv: .venv\Scripts\activate
 
+=======
+import pycountry as pc
+import country_converter as cc
+#.venv\Scripts\activate
+>>>>>>> origin/main
 st.write("""
 # Produzione energetica in Europa
 """)
@@ -78,6 +84,115 @@ st.write("""
 
 countries = df.select("unique_id").unique().sort("unique_id")
 
+<<<<<<< HEAD
+=======
+annual_production = (
+    df.with_columns(year=pl.col("ds").dt.year())
+    .group_by(["unique_id", "year"])
+    .agg(y=pl.sum("y"))
+    .sort(["unique_id", "year"])
+)
+
+st.write("""
+## Produzione totale annuale per ogni nazione
+""", annual_production)
+
+selected_year = st.selectbox(
+    "Seleziona un anno",
+    annual_production["year"].unique(),
+    #default = 2024
+    index=0
+)
+annual_production = annual_production.filter(
+    pl.col("year") == selected_year)
+annual_production = annual_production.with_columns(
+    pl.col("unique_id").alias("ISO")
+)
+
+annual_production = annual_production.filter(pl.col("unique_id") != "EU27_2020")
+#converted_countries = cc.convert(names=annual_production["unique_id"], to='ISOnumeric')
+converted_countries = cc.convert(names=annual_production["unique_id"], to='ISOnumeric')
+
+annual_production = annual_production.with_columns(
+    pl.Series("ISO", converted_countries)
+)
+
+
+#def get_country_name(countries):
+#    for country in countries:
+#        country_name = country["unique_id"]
+#        country = cc.convert(names=country_name, to='IS03')
+#        st.write(country)
+
+from vega_datasets import data
+import json
+
+countries_map = alt.topo_feature(data.world_110m.url, 'countries')
+countries_map2 = f"https://r2.datahub.io/clvyjaryy0000la0cxieg4o8o/main/raw/data/countries.geojson"
+countries_map3 = alt.topo_feature(f"https://cdn.jsdelivr.net/npm/world-atlas@2/countries-50m.json", 'countries')
+#with open('land-50m.json', "r", encoding="utf-8") as f:
+#    map_json = json.load(f)
+#countries_map3 = alt.topo_feature(map_json, 'countries')
+#https://r2.datahub.io/clvyjaryy0000la0cxieg4o8o/main/raw/data/countries.geojson
+
+source = annual_production
+min_value = source['y'].min()
+max_value = source['y'].max()
+
+# source = source.with_columns(
+#    pl.col("ISO").cast(pl.Utf8).alias("state2")
+# )
+
+# source = source.with_columns(
+#     pl.when(pl.col("unique_id") == "BE").then(pl.lit("040"))
+#     .when(pl.col("unique_id") == "AT").then(pl.lit("056"))
+#     .otherwise(pl.col("ISO"))
+#     .alias("state2")
+# )
+
+source = source.with_columns(
+    pl.col("ISO").cast(pl.Utf8)).with_columns(
+    pl.when(pl.col("ISO").str.len_chars() < 3)
+    .then(pl.concat_str([pl.lit("0"), pl.col("ISO")]))
+    .otherwise(pl.col("ISO")).alias("ISO_str")
+    )
+
+st.write(source)
+
+map4 = alt.Chart(countries_map3).mark_geoshape(
+    fill='#666666',
+    stroke='white'
+).project(
+    type= 'mercator',
+    scale= 350,                          # Magnify
+    center= [20,50],                     # [lon, lat]
+    clipExtent= [[0, 0], [800, 400]],    # [[left, top], [right, bottom]]
+).properties(
+    title='Europe (Mercator)',
+    width=800, height=500
+)
+
+map5 = alt.Chart(countries_map3).mark_geoshape(
+    stroke='black'
+).project(
+    type= 'mercator',
+    scale= 350,                          # Magnify
+    center= [20,50],                     # [lon, lat]
+    clipExtent= [[000, 000], [800, 400]],    # [[left, top], [right, bottom]]
+).properties(
+    title='Europe (Mercator)',
+    width=800, height=500
+).transform_lookup(
+    lookup='id',
+    from_=alt.LookupData(source, 'ISO_str', ['y', 'unique_id']),
+).encode(
+    color=alt.Color('y:Q', sort="descending", scale=alt.Scale(
+        scheme='inferno', domain=(min_value,max_value)), legend=alt.Legend(title="", tickCount=6))
+)
+
+map4 + map5
+
+>>>>>>> origin/main
 selected_country = st.multiselect(
     "Seleziona uno stato",
     countries,
@@ -181,7 +296,7 @@ def Arima(state):
     #ris["ds"].dt.offset_by("1mo")
     #ris = pl.DataFrame(ris)
     #ris = ris.with_columns(
-    #    pl.lit(state).alias("state")
+    #    pl.lit(state).alias("ISO")
     #)
     return ris
 
@@ -200,3 +315,8 @@ st.line_chart(
     y = "y",
     color="unique_id"
 )
+<<<<<<< HEAD
+=======
+
+
+>>>>>>> origin/main
