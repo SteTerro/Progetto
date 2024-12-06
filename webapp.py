@@ -2,6 +2,7 @@ import streamlit as st
 import polars as pl
 import pandas as pd
 import altair as alt
+#Per uv: .venv\Scripts\activate
 
 st.write("""
 # Produzione energetica in Europa
@@ -63,6 +64,7 @@ df = (
     .filter(pl.col("y") != 123456789)
     .filter(pl.col("siec") == "TOTAL")
     .filter(pl.col("unit") == "GWH")
+    #.filter(pl.col("unique_id") != "EU27_2020")
     #.filter(pl.col("state") == "IT")
     #.sort("state", "date")
     #.filter(pl.col("unique_id") == "IT")
@@ -76,20 +78,65 @@ st.write("""
 
 countries = df.select("unique_id").unique().sort("unique_id")
 
-
 selected_country = st.multiselect(
     "Seleziona uno stato",
     countries,
     default="EU27_2020"
 )
 
-st.line_chart(
-    df.filter(pl.col("unique_id").is_in(selected_country)),
+stati = df.filter(pl.col("unique_id").is_in(selected_country))
+
+# st.line_chart(
+#     df.filter(pl.col("unique_id").is_in(selected_country)),
+#     x="ds",
+#     y="y",
+#     color="unique_id"
+# )
+
+nearest = alt.selection_point(nearest=True, on="pointerover",
+                              fields=["ds"], empty=False)
+
+# The basic line
+line = alt.Chart(stati).mark_line(interpolate="basis").encode(
     x="ds",
     y="y",
     color="unique_id"
 )
 
+# Transparent selectors across the chart. This is what tells us
+# the x-value of the cursor
+selectors = alt.Chart(stati).mark_point().encode(
+    x="ds",
+    opacity=alt.value(0),
+).add_params(
+    nearest
+)
+when_near = alt.when(nearest)
+
+# Draw points on the line, and highlight based on selection
+points = line.mark_point().encode(
+    opacity=when_near.then(alt.value(1)).otherwise(alt.value(0))
+)
+
+# Draw text labels near the points, and highlight based on selection
+text = line.mark_text(align="left", dx=5, dy=-5).encode(
+    text=when_near.then("y:Q").otherwise(alt.value(" "))
+)
+
+# Draw a rule at the location of the selection
+rules = alt.Chart(stati).mark_rule(color="gray").encode(
+    x="ds",
+).transform_filter(
+    nearest
+)
+
+# Put the five layers into a chart and bind the data
+prova = alt.layer(
+    line, selectors, points, rules, text
+).properties(
+    width=600, height=300
+)
+prova
 st.write("""
 ## Quali sono le previsioni per la produzione di energia?
 """)
@@ -153,66 +200,3 @@ st.line_chart(
     y = "y",
     color="unique_id"
 )
-
-from vega_datasets import data
-import pycountry
-
-source = alt.topo_feature(data.world_110m.url, 'countries')
-param_projection = alt.param(value="equalEarth")
-
-prova1 = alt.Chart(source, width=500, height=300).mark_geoshape(
-    fill='lightgray',
-    stroke='gray'
-).project(
-    type=alt.expr(param_projection.name)
-).add_params(param_projection)
-
-lista = [43, 32, 359, 385, 357, 420, 45, 372, 358, 33, 49, 30, 36, 353, 39, 371, 370, 352, 356, 31, 48, 315, 40, 421, 386, 34, 46]
-
-prova2 = alt.Chart(source).mark_geoshape(
-    fill='#666666',
-    stroke='white'
-).project(
-    type= 'mercator',
-    scale= 350,                          # Magnify
-    center= [20,50],                     # [lon, lat]
-    clipExtent= [[0, 0], [400, 300]],    # [[left, top], [right, bottom]]
-).properties(
-    title='Europe (Mercator)',
-    width=400, height=300
-)
-
-def convert_iso_to_numeric(iso_code):
-    try:
-        return pycountry.countries.lookup(iso_code).numeric
-    except LookupError:
-        return None
-
-st.write(df)
-countries = alt.topo_feature(data.world_110m.url, 'countries')
-source = df.filter(pl.col("ds") == pl.lit("2024-01-01").str.to_date())
-
-min_value = df["y"].min()
-max_value = df["y"].max()
-
-prova3 = alt.Chart(source).mark_geoshape(
-    stroke='gray'
-).project(
-    type= 'mercator',
-).properties(
-    title='Europe (Mercator)',
-).encode(
-    color=alt.Color('y:Q', sort="descending", 
-                    scale=alt.Scale(
-                        scheme='inferno', 
-                        domain=(min_value,max_value)), 
-                        legend=alt.Legend(title="", tickCount=6))
-).transform_lookup(
-    lookup='unique_id',
-    from_=alt.LookupData(source, 'unique_id', ['y'])
-)
-
-
-prova1
-prova2
-prova3 
