@@ -1,15 +1,8 @@
 import streamlit as st
 import polars as pl
-import pandas as pd
 import altair as alt
-<<<<<<< HEAD
-#Per uv: .venv\Scripts\activate
-
-=======
-import pycountry as pc
 import country_converter as cc
 #.venv\Scripts\activate
->>>>>>> origin/main
 st.write("""
 # Produzione energetica in Europa
 """)
@@ -84,8 +77,6 @@ st.write("""
 
 countries = df.select("unique_id").unique().sort("unique_id")
 
-<<<<<<< HEAD
-=======
 annual_production = (
     df.with_columns(year=pl.col("ds").dt.year())
     .group_by(["unique_id", "year"])
@@ -192,7 +183,6 @@ map5 = alt.Chart(countries_map3).mark_geoshape(
 
 map4 + map5
 
->>>>>>> origin/main
 selected_country = st.multiselect(
     "Seleziona uno stato",
     countries,
@@ -315,8 +305,3 @@ st.line_chart(
     y = "y",
     color="unique_id"
 )
-<<<<<<< HEAD
-=======
-
-
->>>>>>> origin/main
