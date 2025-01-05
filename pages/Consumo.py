@@ -376,4 +376,41 @@ ranking_plot = alt.Chart(stati_rank).mark_line(point=True).encode(
 )
 ranking_plot
 
+# @st.cache_data
+# def Arima_cons_2(state):
+#     ts = df_cons.filter(
+#         pl.col("unique_id") == state
+#         ).select(
+#             pl.col("date").alias("ds"),
+#             pl.col("energy_cons").alias("y"),
+#             pl.col("unique_id")
+#             )
 
+#     sf = StatsForecast(
+#         models = [AutoARIMA()],
+#         freq = '1y',
+#         n_jobs=-1,
+#         fallback_model=AutoETS(season_length=1),
+#         )
+
+#     new_dates = pl.date_range(start=pl.datetime(1900,1,1), end=pl.datetime(2000,1,1), interval="1y", eager=True)
+
+#     # Interpola i valori sui nuovi timestamp
+#     interpolated_values = np.interp(
+#         np.linspace(0, len(ts) - 1, len(new_dates)),  # Indici interpolati
+#         np.arange(len(ts)),  # Indici originali
+#         ts["y"]  # Valori originali
+#     )
+
+#     # Aggiungi un po' di rumore per simulare il bootstrap
+#     noise = np.random.normal(0, 0.01, size=len(new_dates))
+#     synthetic_values = interpolated_values + noise
+
+#     # Crea il nuovo DataFrame
+#     expanded_df = pl.DataFrame({"ds": new_dates, "y": synthetic_values, "unique_id": state})
+#     ts_pred = sf.forecast(df=expanded_df, h=4, level=[95])
+#     ts_pred = ts_pred\
+#         .rename({"AutoARIMA": "energy_cons"})\
+#         .rename({"AutoARIMA-lo-95": "AutoARIMA_low90"})\
+#         .rename({"AutoARIMA-hi-95": "AutoARIMA_hi90"})
+#     return ts_pred, expanded_df

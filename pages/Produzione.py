@@ -54,7 +54,9 @@ def get_data_pem(url):
             .str.replace("d", "")
             .str.replace(":c", "123456789")
             .cast(pl.Float64),
-            unique_id=pl.col("state")+";"+pl.col("siec")
+            unique_id=pl.col("state")+";"+pl.col("siec"),
+            state = pl.col("state")
+            .str.replace("EL", "GR")
         )
         .filter(
             pl.col("energy_prod") > 0,
@@ -207,7 +209,7 @@ source = annual_production.with_columns(
     .then(pl.concat_str([pl.lit("0"), pl.col("ISO")]))
     .otherwise(pl.col("ISO")).alias("ISO_str")
     )
-
+st.write(annual_production)
 background = alt.Chart(countries_map).mark_geoshape(
     fill='#666666',
     stroke='white'
