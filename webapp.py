@@ -2,21 +2,67 @@ import streamlit as st
 import polars as pl
 import altair as alt
 import country_converter as cc
-#.venv\Scripts\activate.ps1
-st.write("""
-# Produzione energetica in Europa
-""")
 
-url_1 = "https://ec.europa.eu/eurostat/api/dissemination/sdmx/2.1/data/nrg_cb_pem?format=TSV&compressed=true"
+from statsforecast import StatsForecast
+from statsforecast.models import AutoARIMA, AutoETS
+
+url_consumption = "https://ec.europa.eu/eurostat/api/dissemination/sdmx/2.1/data/nrg_cb_e?format=TSV&compressed=true"
+url_productivity = "https://ec.europa.eu/eurostat/api/dissemination/sdmx/2.1/data/nrg_cb_pem?format=TSV&compressed=true"
+
 st.write(f"""
-     La seguente tabella mostra i dati sulla produzione energetica dal [sito Eurostat]({url_1}).
- """)
-
-#Sostituire Unique_id con state
-#Sostituire Code con Unique_id
+# Consumo di energia in Europa""")
 
 @st.cache_data
-def get_data_pem(url):
+def get_data_consumption(url):
+    data = (
+        pl.read_csv(
+            url,
+            separator="\t",
+            null_values=["", ":", ": "],
+            )
+        .select(
+            pl.col("freq,nrg_bal,siec,unit,geo\\TIME_PERIOD")
+            .str.split(",")
+            .list.to_struct(fields=["freq","nrg_bal","siec", "unit", "state"])
+            .alias("combined_info"),
+            pl.col("*").exclude("freq,nrg_bal,siec,unit,geo\\TIME_PERIOD")
+        )
+        .unnest("combined_info")
+        .unpivot(
+            index=["freq","nrg_bal","siec", "unit", "state"],
+            value_name="energy_cons",
+            variable_name="date"
+        ).with_columns(
+            date=pl.col("date")
+            .str.replace(" ", "")
+            .str.to_date(format='%Y', strict=True),
+            energy_cons=pl.col("energy_cons")
+            .str.replace(" ", "")
+            .str.replace("p", "")
+            .str.replace("u", "")
+            .str.replace("e", "")
+            .str.replace("n", "")
+            .str.replace("d", "")
+            .str.replace(":", "123456789")
+            .cast(pl.Float64),
+            unique_id=pl.col("state")+";"+pl.col("nrg_bal"),
+            state = pl.col("state")
+            .str.replace("EL", "GR")
+        )
+        .filter(
+            pl.col("energy_cons").is_not_null(),
+            pl.col("energy_cons") != 123456789,
+            pl.col("state")!="EA20",
+            pl.col("nrg_bal").is_in(["FC", "FC_IND_E" , "FC_TRA_E", "FC_OTH_CP_E", "FC_OTH_HH_E", "FC_OTH_AF_E"]),
+        )
+        .drop("freq",
+              "unit")
+        .sort("state", "date") 
+    )
+    return data
+
+@st.cache_data
+def get_data_productivity(url):
     data = (
         pl.read_csv(
             url,
@@ -27,31 +73,19 @@ def get_data_pem(url):
             pl.col("freq,siec,unit,geo\\TIME_PERIOD")
             .str.split(",")
             .list.to_struct(fields=["freq","siec", "unit", "state"])
-            #.list.to_struct(fields=["freq","siec", "unit", "unique_id"])
             .alias("combined_info"),
             pl.col("*").exclude("freq,siec,unit,geo\\TIME_PERIOD")
         )
         .unnest("combined_info")
         .unpivot(
             index=["freq","siec", "unit", "state"],
-            #index=["freq","siec", "unit", "unique_id"],
             value_name="energy_prod",
-            #value_name="y",
-            #variable_name="date"
             variable_name="date"
         )
-        #.with_columns(# Add a new column 'age_in_5_years' based on the 'age' column
-        #    (pl.col("date") + "-01"))
-
-        #    pl.lit("-01", dtype="str").alias("day"))
         .with_columns(
-            #date=pl.col("date")
             date=pl.col("date")
             .str.replace(" ", "")
             .str.to_date(format='%Y-%m'),
-            #.str.strptime(pl.date, format='%Y-%m'),
-            #.str.strptime(pl.date, format='%Y-%m'),
-            #energy_productivity=pl.col("energy_productivity")
             energy_prod=pl.col("energy_prod")
             .str.replace(" ", "")
             .str.replace("p", "")
@@ -61,139 +95,159 @@ def get_data_pem(url):
             .str.replace("d", "")
             .str.replace(":c", "123456789")
             .cast(pl.Float64),
-            unique_id=pl.col("state")+";"+pl.col("siec")
+            unique_id=pl.col("state")+";"+pl.col("siec"),
+            state = pl.col("state")
+            .str.replace("EL", "GR")
         )
-        #.filter(pl.col("energy_productivity").is_not_null())
-        #.filter(pl.col("energy_productivity") != 123456789)
-        .filter(pl.col("energy_prod").is_not_null())
-        .filter(pl.col("energy_prod") != 123456789)
-        #.filter(pl.col("siec") == "TOTAL")
-        .filter(pl.col("unit") == "GWH")
-        .drop("freq")
-        .drop("unit")
-        .filter(pl.col("siec") != "RA110",
-            pl.col("siec") != "RA120",
-            pl.col("siec") != "RA130",
-            pl.col("siec") != "RA310",
-            pl.col("siec") != "RA320",
-            pl.col("siec") != "RA410",
-            pl.col("siec") != "RA420",
-            pl.col("siec") != "FE"
+        .filter(
+            pl.col("energy_prod") > 0,
+            pl.col("energy_prod").is_not_null(),
+            pl.col("energy_prod") != 123456789,
+            pl.col("unit") == "GWH",
+            pl.col("siec").is_in(["TOTAL","X9900","RA000","N9000","CF","CF_R","RA100","RA200","RA300","RA400","RA500_5160","C0000","CF_NR","G3000","O4000XBIO"]),
             )
-        #.filter(pl.col("unique_id") != "EU27_2020")
-        #.sort("state", "date")
-        #.filter(pl.col("state") == "IT")
-        #.sort("state", "date")
+        .drop("freq",
+              "unit")
         .sort("state", "date") 
     )
     return data
 
-df = get_data_pem(url_1)
-#df = data
+## Utils ######################################################################################################
+def select_state():
+    state = st.selectbox(
+        "Seleziona uno stato",
+        df_prod["state"].unique().sort(),
+    )
+    return state
 
-################################################################################################################
-url_2 = "https://ec.europa.eu/eurostat/api/dissemination/sdmx/2.1/data/nrg_cb_em?format=TSV&compressed=true"
-################################################################################################################
+def select_multi_state(df_input, countries):
+    selected_multi_state = st.multiselect(
+        "Seleziona uno stato",
+        df_input.select("state").unique().sort("state"),
+        default=countries
+    )
+    return selected_multi_state
 
-countries = df.select("unique_id").unique().sort("unique_id").to_series()
-#countries = df.select(["unique_id", "siec"]).unique().sort("unique_id")
-
-#.filter(pl.col("unique_id") != "EU27_2020")
-#st.write(countries)
-
-################################################################################
-
-# countries2 = df.select("unique_id").unique().sort("unique_id")
-# selected_country2 = st.multiselect(
-#     "Seleziona uno stato",
-#     countries,
-#     #default="EU27_2020",
-#     key="unique_key_country2"
-# )
-
-#@st.cache_data
 def select_siec():
     siec = st.selectbox(
         "Seleziona un tipo di energia",
-        df["siec"].unique().sort(),
+        df_prod["siec"].unique().sort(),
         index=13
     )
     return siec
 
-#@st.cache_data
-def select_year(y_range):
-    year = st.select_slider(
-            "Seleziona un anno",
-            #annual_production["year"].unique(),
-            y_range.unique(),
-            value = 2024
-            #index=0
-        )
-    return year
-
 def select_country():
-    country = st.multiselect(
+    country = st.selectbox(
         "Seleziona uno stato",
-        df.select("state").unique().sort("state"),
+        df_comb.select("state").unique().sort("state"),
         default="IT"
         )
     return country
 
-from statsforecast import StatsForecast
-from statsforecast.models import AutoARIMA
-from statsforecast.models import SeasonalNaive
+def select_year(df_input):
+    year = st.select_slider(
+                "Seleziona un anno",
+                df_input["date"].unique(),
+            )
+    return year
 
-#per recuperare la vecchia funzione vedere commit precedenti
+def get_first_5_countries(df_input, filter):
+    if df_input.columns == df_prod.columns:
+        x = "energy_prod"
+        type = "siec"
+    elif df_input.columns == df_cons.columns:
+        x = "energy_cons"
+        type = "nrg_bal"
+    if df_input.columns == df_prod_pred.columns:
+        x = "energy_prod"
+        type = "siec"
+    elif df_input.columns == df_cons_pred_A.columns:
+        x = "energy_cons"
+        type = "nrg_bal"
+    elif df_input.columns == df_A.columns:
+        x = "deficit"
+        type = "def_id"
+
+    country_default = df_input.filter(pl.col(type) == filter).group_by("state").agg(
+        pl.sum(x).alias("total_energy")
+    ).sort("total_energy", descending=True).head(5).select("state").to_series()
+    return country_default
+
+def df_from_M_to_A(df_input):
+    if df_input.columns == df_prod_pred.columns:
+        x = "energy_prod"
+        type = "siec"
+        agg = energy_prod=pl.sum("energy_prod")
+    if df_input.columns == df_cons_pred.columns:
+        x = "energy_cons"
+        type = "nrg_bal"
+        agg = energy_cons=pl.mean("energy_cons")
+    
+    df_A = (
+        df_input.with_columns(
+            year=pl.col("date").dt.year())
+        .group_by(["state", "year", "unique_id", type])# + ["predicted"]) #[col for col in df_input.columns if col not in ["state", "year", "unique_id", type, "date", x]])
+        .agg(agg)
+        .sort(["state", "year"])
+    ).with_columns(
+        date=pl.col("year").cast(pl.Utf8).str.to_date(format='%Y'),
+        ).drop("year")#.rename({"col": x})
+    # if x == "energy_prod":
+    #     df_A = df_A.with_columns(
+    #         energy_prod=pl.sum("energy_prod").over("unique_id", "date")
+    #     )
+    st.write(df_A)
+    return df_A
+
+## Predizione ##################################################################################################
 @st.cache_data
-def Arima(state):
-    ts = df.filter(
+def Arima_prod(state):
+    ts = df_prod.filter(
         pl.col("unique_id") == state
         ).select(
             pl.col("date").alias("ds"),
             pl.col("energy_prod").alias("y"),
             pl.col("unique_id")
             )
+    if len(ts) == 0:
+        st.warning("Non ci sono dati per questo stato")
     sf = StatsForecast(
         models = [AutoARIMA(season_length = 12)],
         freq = '1mo',
         n_jobs=-1,
-        fallback_model=SeasonalNaive(season_length=12)
+        fallback_model=AutoETS(season_length=12)
         )
-    ts_pred = sf.forecast(df=ts, h=48, level=[90])
+
+    ts_pred = sf.forecast(df=ts, h=48, level=[95]) 
     ts_pred = ts_pred\
         .rename({"AutoARIMA": "energy_prod"})\
-        .rename({"AutoARIMA-lo-90": "AutoARIMA_low90"})\
-        .rename({"AutoARIMA-hi-90": "AutoARIMA_hi90"})
+        .rename({"AutoARIMA-lo-95": "AutoARIMA_low90"})\
+        .rename({"AutoARIMA-hi-95": "AutoARIMA_hi90"})
+    
     return ts_pred
 
-# x = pl.DataFrame()
-# st.write(x)
-# for state in selected_country2:
-#     if x.is_empty():
-#         x = Arima(state)
-#     elif state in x["unique_id"]:
-#         pass
-#     else: 
-#         x = pl.concat([x, Arima(state)])
-
 @st.cache_data
-def pred_siec(filtro):#df2: pl.DataFrame, siec):
-    #df2 = df2
-    df2 = df.filter(pl.col("siec") == filtro).with_columns(
+def pred_siec(filtro, state = None):
+    if state is None:
+        x = "siec"
+    else:
+        x = "state"
+    df_funz = df_prod.filter(pl.col(x) == filtro).with_columns(
         AutoARIMA_low90 = pl.lit(0),
         AutoARIMA_hi90 = pl.lit(0), 
         predicted = pl.lit(False)
         ).sort("AutoARIMA_hi90", "AutoARIMA_low90", "date", "energy_prod", "predicted", "siec", "state","unique_id")  
-    st.write(df2)
-    countries_2 = df2.select("unique_id").unique().sort("unique_id").to_series()
+    if state is None:
+        countries = df_funz.select("unique_id").unique().sort("unique_id").to_series()
+    else:
+        countries = [state + ";" + filtro]
     pred = pl.DataFrame()
-    filtered_countries = countries_2#countries.filter(pl.col("siec") == siec)
-    for state in filtered_countries:
-        pred = pl.concat([pred, Arima(state)])
-        
+    for state in countries:
+        state_pred = Arima_prod(state)
+        pred = pl.concat([pred, state_pred])
+
     pred = pred.with_columns(
         predicted = pl.lit(True),
-        #unit = pl.lit("GWH"),
         ).with_columns(
             pl.col("unique_id")
                 .str.split(";")
@@ -202,123 +256,29 @@ def pred_siec(filtro):#df2: pl.DataFrame, siec):
             date = pl.col("ds")
         ).unnest("combined_info").drop("ds")
 
-    sorted_columns = sorted(df2.columns)
-    df2 = df2.select(sorted_columns)
+    df_funz = df_funz.select(sorted(df_funz.columns))
     pred = pred.select(sorted(pred.columns))
 
-    df_combined = pl.concat([df2, pred], how= "vertical_relaxed")
+    df_combined = pl.concat([df_funz, pred], how= "vertical_relaxed")
     return df_combined
 
-
-# st.line_chart(
-#     #data=x,
-#     #pred.filter(pl.col("unique_id").is_in(selected_country)),
-#     x="date",
-#     #y=["AutoARIMA", "y"],
-#     y = "energy_prod",
-#     color="unique_id"
-# )
-# ################################################################################
-### Creazione Mappa
-
-selected_siec = select_siec()
-df_combined = pred_siec(selected_siec)
-
-annual_production = (
-    df_combined.with_columns(year=pl.col("date").dt.year())
-    .group_by(["state", "year", "unique_id", "siec"])
-    .agg(y=pl.sum("energy_prod"))
-    .sort(["state", "year"])
-    .filter(pl.col("state") != "EU27_2020")
-)
-st.write(annual_production)
-st.write(df_combined)
-
-st.write("""
-## Produzione totale annuale per ogni nazione
-""") #, annual_production)
-
-selected_year = select_year(annual_production["year"])
-
-annual_production = annual_production.filter(
-    pl.col("year") == selected_year)
-
-# converted_countries = cc.convert(names=annual_production["unique_id"], to='ISOnumeric')
-converted_countries = cc.convert(names=annual_production["state"], to='ISOnumeric')
-
-annual_production = annual_production.with_columns(
-    pl.Series("state", converted_countries).alias("ISO")
-).filter(pl.col("siec") == selected_siec).sort("y")
-
-countries_map = alt.topo_feature(f"https://cdn.jsdelivr.net/npm/world-atlas@2/countries-50m.json", 'countries')
-#countries_map = alt.topo_feature(f"https://cdn.jsdelivr.net/npm/world-atlas@2/countries-10m.json", 'countries')
-
-source = annual_production
-min_value = source['y'].min()
-max_value = source['y'].max()
-
-source = source.with_columns(
-    pl.col("ISO").cast(pl.Utf8)).with_columns(
-    pl.when(pl.col("ISO").str.len_chars() < 2)
-    .then(pl.concat_str([pl.lit("00"), pl.col("ISO")]))
-    .when(pl.col("ISO").str.len_chars() < 3)
-    .then(pl.concat_str([pl.lit("0"), pl.col("ISO")]))
-    .otherwise(pl.col("ISO")).alias("ISO_str")
-    )
-
-background = alt.Chart(countries_map).mark_geoshape(
-    fill='#666666',
-    stroke='white'
-).project(
-    type= 'mercator',
-    scale= 350,                          # Magnify
-    center= [20,50],                     # [lon, lat]
-    clipExtent= [[0, 0], [800, 400]],    # [[left, top], [right, bottom]]
-).properties(
-    #title='Produzione energetica annuale in Europa',
-    width=800, height=500
-).encode(tooltip=alt.value(None))
-
-map = alt.Chart(countries_map).mark_geoshape(
-    stroke='black'
-).project(
-    type= 'mercator',
-    scale= 350,                          # Magnify
-    center= [20,50],                     # [lon, lat]
-    clipExtent= [[000, 000], [800, 400]],    # [[left, top], [right, bottom]]
-).properties(
-    width=800, height=500
-).transform_lookup(
-    lookup='id',
-    from_=alt.LookupData(source, 'ISO_str', ['state', 'y']),
-).encode(
-    color=alt.Color('y:Q', sort="descending", scale=alt.Scale(
-        scheme='inferno', domain=(min_value,max_value)), legend=alt.Legend(title="", tickCount=6)),
-    tooltip=['state:N','y:Q']
-)
-
-background + map
-#################################################################################
-
 @st.cache_data
-def pred_state(filtro):#df2: pl.DataFrame, siec):
-    #df2 = df2
+def pred_state(filtro):
     for state in filtro:
-        df2 = df.filter(pl.col("state") == state).with_columns(
+        df_funz = df_prod.filter(pl.col("state") == filtro).with_columns(
             AutoARIMA_low90 = pl.lit(0),
             AutoARIMA_hi90 = pl.lit(0), 
             predicted = pl.lit(False)
             ).sort("AutoARIMA_hi90", "AutoARIMA_low90", "date", "energy_prod", "predicted", "siec", "state","unique_id")  
-        st.write(df2)
-        countries_2 = df2.select("unique_id").unique().sort("unique_id").to_series()
+    
+        countries = df_funz.select("unique_id").unique().sort("unique_id").to_series()
         pred = pl.DataFrame()
-        filtered_countries = countries_2#countries.filter(pl.col("siec") == siec)
-        for state in filtered_countries:
-            pred = pl.concat([pred, Arima(state)])
-            
+        for state in countries:
+            state_pred = Arima_prod(state)
+            pred = pl.concat([pred, state_pred])
+
         pred = pred.with_columns(
             predicted = pl.lit(True),
-            #unit = pl.lit("GWH"),
             ).with_columns(
                 pl.col("unique_id")
                     .str.split(";")
@@ -327,325 +287,592 @@ def pred_state(filtro):#df2: pl.DataFrame, siec):
                 date = pl.col("ds")
             ).unnest("combined_info").drop("ds")
 
-        sorted_columns = sorted(df2.columns)
-        df2 = df2.select(sorted_columns)
+        df_funz = df_funz.select(sorted(df_funz.columns))
         pred = pred.select(sorted(pred.columns))
 
-        df_combined = pl.concat([df2, pred], how= "vertical_relaxed")
+        df_combined = pl.concat([df_funz, pred], how= "vertical_relaxed")
         return df_combined
 
-selected_country_2 = select_country()
-df_combined_2 = pred_state(selected_country_2)
-df_combined_2 = df_combined_2.filter(
-    pl.col("siec") != "TOTAL",
-    #pl.col("siec") != "CF",
-    #pl.col("siec") != "RA000",
-    pl.col("siec") != "CF_R",
-    pl.col("siec") != "C0000",
-    pl.col("siec") != "O4000XBIO",
-    pl.col("siec") != "G3000",
-    #pl.col("siec") != "N9000",
-    pl.col("siec") != "CF_NR",
-    pl.col("siec") != "FE",
-    pl.col("siec") != "RA100",
-    pl.col("siec") != "RA200",
-    pl.col("siec") != "RA300",
-    pl.col("siec") != "RA400",
-    pl.col("siec") != "RA500_5160",
+@st.cache_data
+def Arima_cons(state):
+    ts = df_cons.filter(
+        pl.col("unique_id") == state
+        ).select(
+            pl.col("date").alias("ds"),
+            pl.col("energy_cons").alias("y"),
+            pl.col("unique_id")
+            )
+
+    sf = StatsForecast(
+        models = [AutoARIMA(season_length = 6 )],#season_length = 6
+        freq = '2mo',
+        n_jobs=-1,
+        fallback_model=AutoETS(season_length=6),
+        )
+
+    ts_upscale = (
+        ts.upsample(time_column="ds", every="2mo")
+        .interpolate()
+        .fill_null(strategy="forward")
+    )
+    
+    ts_pred = sf.forecast(df=ts_upscale, h=24, level=[95])
+    ts_pred = ts_pred\
+        .rename({"AutoARIMA": "energy_cons"})\
+        .rename({"AutoARIMA-lo-95": "AutoARIMA_low90"})\
+        .rename({"AutoARIMA-hi-95": "AutoARIMA_hi90"})
+    return ts_pred 
+
+@st.cache_data
+def pred_cons(filtro, state = None):
+    df_funz = df_cons.filter(pl.col("nrg_bal") == filtro).with_columns(
+        AutoARIMA_low90 = pl.lit(0),
+        AutoARIMA_hi90 = pl.lit(0), 
+        predicted = pl.lit(False)
+        ).sort("AutoARIMA_hi90", "AutoARIMA_low90", "date","energy_cons","nrg_bal","predicted", "state","unique_id")  
+    if state is None:
+        countries = df_funz.select("unique_id").unique().sort("unique_id").to_series()
+    else:
+        countries = [state + ";" + filtro]
+    pred = pl.DataFrame()
+    for state in countries:
+        pred_state = Arima_cons(state)
+        pred = pl.concat([pred, pred_state])
+
+    pred = pred.with_columns(
+        predicted = pl.lit(True),
+        ).with_columns(
+            pl.col("unique_id")
+                .str.split(";")
+                .list.to_struct(fields=["state", "nrg_bal"])
+                .alias("combined_info"),
+            date = pl.col("ds")
+        ).unnest("combined_info").drop("ds")
+
+    df_funz = df_funz.select(sorted(df_funz.columns)).drop("siec")
+    pred = pred.select(sorted(pred.columns))
+    df_combined = pl.concat([df_funz, pred], how= "vertical_relaxed")
+
+    return df_combined
+## Creazione Dataframe ########################################################################################
+df_prod = get_data_productivity(url_productivity)
+df_cons = get_data_consumption(url_consumption)
+
+cc_2 = cc.CountryConverter()
+country_list = pl.from_pandas(cc_2.EU27as('ISO2'))
+country_list = country_list.select(pl.col("ISO2")).to_series()
+
+list_consuption = ["FC", "FC_IND_E" , "FC_TRA_E", "FC_OTH_CP_E", "FC_OTH_HH_E", "FC_OTH_AF_E"]
+list_productivity = ["TOTAL","X9900","RA000","N9000","CF","CF_R","RA100","RA200","RA300","RA400","RA500_5160","C0000","CF_NR","G3000","O4000XBIO"]
+area_list = ["X9900","RA000","N9000","CF"]
+RA_list = ["CF_R","RA100","RA200","RA300","RA400","RA500_5160"]
+CF_list = ["C0000","CF_NR","G3000","O4000XBIO"]
+
+EU27_2020_filter = df_prod.filter(pl.col("state") == "EU27_2020")
+df_prod = df_prod.filter(pl.col("state").is_in(country_list))
+df_prod = pl.concat([df_prod, EU27_2020_filter])
+
+EU27_2020_filter = df_cons.filter(pl.col("state") == "EU27_2020")
+df_cons = df_cons.filter(pl.col("state").is_in(country_list))
+df_cons = pl.concat([df_cons, EU27_2020_filter])
+
+# df_A = df_A.filter(pl.col("def_id") == "TOTAL;FC").drop("energy_prod","siec","nrg_bal","energy_cons","unique_id")
+
+df_prod_pred = pred_siec("TOTAL")
+df_cons_pred = pred_cons("FC")
+
+df_prod_pred_A = df_from_M_to_A(df_prod_pred)
+df_cons_pred_A = df_from_M_to_A(df_cons_pred)
+
+df_comb = df_prod_pred_A.join(df_cons_pred_A, on = ["state", "date"], how = "inner")
+df_A = df_comb.with_columns(
+    deficit = 
+    (pl.when(pl.col("siec") == "TOTAL")
+     .then(pl.col("energy_prod"))
+     .otherwise(pl.lit(0))
+     - pl.when(pl.col("nrg_bal") == "FC")
+     .then(pl.col("energy_cons"))
+     .otherwise(pl.lit(0))),
+     def_id=pl.col("siec")+";"+pl.col("nrg_bal"),
+     #predicted = pl.when(pl.col("predicted") | pl.col("predicted_right")).then(pl.lit(True)).otherwise(pl.lit(False))
+)# .drop("predicted_right")
+
+## Mappa ######################################################################################################
+def mappa(df_input, year):
+    if df_input.columns == df_prod_pred_A.columns:
+        x = "energy_prod"
+        type = "siec"
+    if df_input.columns == df_cons_pred_A.columns:
+        x = "energy_cons"
+        type = "nrg_bal"
+    if df_input.columns == df_A.columns:
+        x = "deficit"
+        type = "def_id"
+
+    stati_map = df_input.filter(
+        pl.col("date") == year,
+        pl.col("state") != "EU27_2020"
+        )
+
+    converted_countries = cc.convert(names=stati_map["state"], to='ISOnumeric')
+
+    selected_bal = st.selectbox(
+            "Seleziona un tipo di consumo di energia",
+            df_input[type].unique().sort(),
+        )
+
+    stati_map = stati_map.with_columns(
+        pl.Series("state", converted_countries).alias("ISO")
+    ).filter(pl.col(type) == selected_bal).sort(x, "state")
+
+    countries_map = alt.topo_feature(f"https://cdn.jsdelivr.net/npm/world-atlas@2/countries-50m.json", 'countries')
+    #countries_map = alt.topo_feature(f"https://cdn.jsdelivr.net/npm/world-atlas@2/countries-10m.json", 'countries')
+
+    min_value = stati_map[x].min()
+    max_value = stati_map[x].max()
+
+    source = stati_map.with_columns(
+        pl.col("ISO").cast(pl.Utf8)).with_columns(
+        pl.when(pl.col("ISO").str.len_chars() < 2)
+        .then(pl.concat_str([pl.lit("00"), pl.col("ISO")]))
+        .when(pl.col("ISO").str.len_chars() < 3)
+        .then(pl.concat_str([pl.lit("0"), pl.col("ISO")]))
+        .otherwise(pl.col("ISO")).alias("ISO_str")
+        )
+
+    background = alt.Chart(countries_map).mark_geoshape(
+        fill='#666666',
+        stroke='white'
+    ).project(
+        type= 'mercator',
+        scale= 350,                          # Magnify
+        center= [20,50],                     # [lon, lat]
+        clipExtent= [[0, 0], [800, 400]],    # [[left, top], [right, bottom]]
+    ).properties(
+        #title='Produzione energetica annuale in Europa',
+        width=800, height=500
+    ).encode(tooltip=alt.value(None))
+
+    map = alt.Chart(countries_map).mark_geoshape(
+        stroke='black'
+    ).project(
+        type= 'mercator',
+        scale= 350,                          # Magnify
+        center= [20,50],                     # [lon, lat]
+        clipExtent= [[000, 000], [800, 400]],    # [[left, top], [right, bottom]]
+    ).properties(
+        width=800, height=500
+    ).transform_lookup(
+        lookup='id',
+        from_=alt.LookupData(source, 'ISO_str', ['state', x]),
+    ).encode(
+        color=alt.Color(x+":Q", sort="descending", scale=alt.Scale(
+            scheme='inferno', domain=(min_value,max_value)), legend=alt.Legend(title="", tickCount=6)),
+        tooltip=['state:N',x+":Q"]
     )
 
-color_palette = alt.Scale(
-    domain=['RA000', 'CF', 'X9900', 'N9000'],
-    range=['#00b25d', '#b51d14', '#cacaca', '#ddb310']
-)
+    background + map
+## Line Chart con Banda dell'intervallo #######################################################################
 
-area = alt.Chart(df_combined_2).mark_area().encode(
-    x="date:T",
-    y=alt.Y("energy_prod:Q").stack("normalize"),
-    color=alt.Color("siec:N", scale = color_palette)
-).properties(
-    width=800, height=500
-)
-area
+def line_chart_with_IC(df_cons_pred, df_cons_pred_A, selected_single_state):
+    for consuption in list_consuption:
+        df_cons_pred = pl.concat([df_cons_pred, pred_cons(consuption, selected_single_state)])
+    # df_cons_pred_A = df_from_M_to_A(df_cons_pred)
 
-#################################################################################
-import math
-# st.write(annual_production)
+    stati_line = df_cons_pred.filter(
+        pl.col("state") == selected_single_state,
+        pl.col("nrg_bal") != "FC")
 
-# annual_production_selected = annual_production.sort("y", descending=True).head(10)
+    nearest = alt.selection_point(nearest=True, on="pointerover",
+                                fields=["date"], empty=False)
 
-# polar_bars = alt.Chart(annual_production_selected).mark_arc(stroke='white', tooltip=True).encode(
-#     theta=alt.Theta("state:N"),
-#     radius=alt.Radius('y:Q').scale(type='linear'),
-#     radius2=alt.datum(1),
-# )
-# p = int(max_value/6)
-# # Create the circular axis lines for the number of observations
-# axis_rings = alt.Chart(pl.DataFrame({"ring": range(p, int(max_value),p)})).mark_arc(stroke='lightgrey', fill=None).encode(
-#     theta=alt.value(2 * math.pi),
-#     radius=alt.Radius('ring').stack(False)
-# )
-# axis_rings_labels = axis_rings.mark_text(color='grey', radiusOffset=5, align='left').encode(
-#     text="ring",
-#     theta=alt.value(math.pi / 4)
-# )
+    highlight = alt.selection_point(on='pointerover', fields=['energy_cons'], nearest=True)
 
-# # Create the straight axis lines for the time of the day
-# axis_lines = alt.Chart(pl.DataFrame({
-#     "radius": max_value,
-#     "theta": math.pi / 2,
-#     'classifica': ['1', '2', '3', '4']
-# })).mark_arc(stroke='lightgrey', fill=None).encode(
-#     theta=alt.Theta('theta').stack(True),
-#     radius=alt.Radius('radius'),
-#     radius2=alt.datum(1),
-# )
-# axis_lines_labels = axis_lines.mark_text(
-#         color='grey',
-#         radiusOffset=5,
-#         thetaOffset=-math.pi / 4,
-#         # These adjustments could be left out with a larger radius offset, but they make the label positioning a bit clearner
-#         #align=alt.expr('datum.classifica == "2" ? "right" : datum.classifica == "3" ? "left" : "center"'),
-#         #baseline=alt.expr('datum.classifica == "4" ? "bottom" : datum.classifica == "1" ? "top" : "middle"'),
-#     )#.encode(text="classifica")
-
-# polar_bar = alt.layer(
-#     axis_rings,
-#     polar_bars,
-#     axis_rings_labels,
-#     axis_lines,
-#     axis_lines_labels,
-#     title=['Classifica', '']
-# ).properties(
-#     width=800, height=500
-# )
-# polar_bar
-#################################################################################
-
-siec = st.selectbox(
-        "Seleziona un tipo di energia",
-        df_combined_2["siec"].unique().sort(),
+    # The basic line
+    line = alt.Chart(stati_line).mark_line(interpolate="basis").encode(
+        x="date",
+        y="energy_cons:Q",
+        color="nrg_bal:N"
     )
-selected_year_months = df_combined_2.with_columns(
-    year = pl.col("date").dt.year(),
-    month = pl.col("date").dt.month()
-).filter(
-    pl.col("year") == selected_year,
-).filter(pl.col("siec") == siec)
+    when_near = alt.when(nearest)
 
-st.write(selected_year_months)
+    conf_int = stati_line.filter(pl.col("predicted") == True)
+    band = alt.Chart(conf_int).mark_errorband(extent='ci').encode(
+        x="date",
+        y=alt.Y("AutoARIMA_low90:Q", title="Energy Consumption"),
+        y2="AutoARIMA_hi90:Q",
+        color="nrg_bal:N"
+    )
 
-polar_bars_2 = alt.Chart(selected_year_months).mark_arc(stroke='white', tooltip=True).encode(
-    theta=alt.Theta("month:N"),
-    radius=alt.Radius('energy_prod:Q').scale(type='linear'),
-    radius2=alt.datum(1),
-)
+    # Draw points on the line, and highlight based on selection
+    points = line.mark_point().encode(
+        opacity=when_near.then(alt.value(1)).otherwise(alt.value(0))
+    )
 
-max_value_m = selected_year_months['energy_prod'].max()
-p2 = int(max_value_m/3)
-# Create the circular axis lines for the number of observations
-axis_rings_2 = alt.Chart(pl.DataFrame({"ring": range(p2, int(max_value_m),p2)})).mark_arc(stroke='lightgrey', fill=None).encode(
-    theta=alt.value(2 * math.pi),
-    radius=alt.Radius('ring').stack(False)
-)
-axis_rings_labels_2 = axis_rings_2.mark_text(color='grey', radiusOffset=5, align='left').encode(
-    text="ring",
-    theta=alt.value(math.pi / 4)
-)
+    # Draw a rule at the location of the selection
+    rules = alt.Chart(stati_line).transform_pivot(
+        "nrg_bal",
+        value="energy_cons",
+        groupby=["date"]
+    ).mark_rule(color="gray").encode(
+        x="date",
+        opacity=when_near.then(alt.value(0.3)).otherwise(alt.value(0)),
+        tooltip=[alt.Tooltip(c, type="quantitative") for c in stati_line["nrg_bal"].unique()],
+    ).add_params(nearest)
 
-# Create the straight axis lines for the time of the day
-axis_lines_2 = alt.Chart(pl.DataFrame({
-    "radius": max_value_m,
-    "theta": math.pi / 2,
-    'mese': ['Gennaio', 'Aprile', 'Luglio', 'Ottobre']
-})).mark_arc(stroke='lightgrey', fill=None).encode(
-    theta=alt.Theta('theta').stack(True),
-    radius=alt.Radius('radius'),
-    radius2=alt.datum(1),
-)
-axis_lines_labels_2 = axis_lines_2.mark_text(
-        color='grey',
-        radiusOffset=5,
-        thetaOffset=-math.pi / 4,
-        # These adjustments could be left out with a larger radius offset, but they make the label positioning a bit clearner
-        # align=alt.expr('datum.mese == "Aprile" ? "right" : datum.mese == "Ottobre" ? "left" : "center"'),
-        # baseline=alt.expr('datum.mese == "Luglio" ? "bottom" : datum.mese == "Gennaio" ? "top" : "middle"'),
-    )#.encode(text="mese")
+    # Put the five layers into a chart and bind the data
+    line_chart = alt.layer(
+        band, line, points, rules
+    ).properties(
+        width=800, height=300
+    ).resolve_scale(
+        y="shared"
+    )
+    line_chart
+    # return df_cons_pred_A
+#df_cons_pred_A = line_chart_with_IC(df_cons_pred, df_cons_pred_A, selected_single_state, list_consuption)
 
-polar_bar_2 = alt.layer(
-    axis_rings_2,
-    polar_bars_2,
-    axis_rings_labels_2,
-    axis_lines_2,
-    axis_lines_labels_2,
-    title=['Produzione mensile']
-).properties(
-    width=800, height=500
-)
-polar_bar_2
-#################################################################################
+## Barchart Classifica Deficit ################################################################################
+def barchart_classifica(df_input):
+    predicate = alt.datum.deficit > 0
+    color = alt.when(predicate).then(alt.value("green")).otherwise(alt.value("red"))
+    select = alt.selection_point(name="select", on="click")
+    highlight = alt.selection_point(name="highlight", on="pointerover", empty=False)
 
-st.write("""
-## Qual è la produzione di energia di uno stato europeo?
-""")#, df)
+    stroke_width = (
+        alt.when(select).then(alt.value(2, empty=False))
+        .when(highlight).then(alt.value(1))
+        .otherwise(alt.value(0))
+    )
 
+    base = alt.Chart(df_input.filter(pl.col("date") == pl.datetime(2018,1,1), pl.col("def_id") == "TOTAL;FC")
+    ).mark_bar(stroke="black", cursor="pointer"
+    ).encode(
+        y=alt.Y("state", sort="-x"),
+        x="deficit:Q",
+        color=color,
+        fillOpacity=alt.when(select).then(alt.value(1)).otherwise(alt.value(0.3)),
+        strokeWidth=stroke_width,
+    ).add_params(select, highlight).properties(width=600)
 
-stati = df_combined.filter(pl.col("state").is_in(selected_country_2)).filter(pl.col("siec") == selected_siec)
-st.write(stati)
+    text_conditioned = base.mark_text(
+        align="left",
+        baseline="middle",
+        dx=alt.expr(alt.expr.if_(alt.datum.deficit >= 0, 5, -55))
+    ).encode(text="deficit:Q")
 
-nearest = alt.selection_point(nearest=True, on="pointerover",
+    barchart_classifica = alt.layer(base, text_conditioned).configure_scale(bandPaddingInner=0.2)
+    barchart_classifica
+
+# barchart_classifica(df_A)
+## Line Chart con Doppio Asse Y ###############################################################################
+def lineplot_prod(df_input, countries, siec):
+
+    stati_line = df_input.filter(pl.col("state").is_in(countries)).filter(
+    pl.col("siec") == siec,
+    pl.col("state") != "EU27_2020"
+    )
+    # stati_line = stati_line.with_columns(
+    #     tooltip = pl.col("state")+"- "+pl.col("energy_prod").cast(pl.Utf8).str.replace("- ",": "))
+    nearest = alt.selection_point(nearest=True, on="pointerover",
+                                fields=["date"], empty=False)
+
+    highlight = alt.selection_point(on='pointerover', fields=['energy_cons'], nearest=True)
+
+    # The basic line
+    line = alt.Chart(stati_line).mark_line(interpolate="basis").encode(
+        x="date",
+        y="energy_prod:Q",
+        color="state"
+    )
+    when_near = alt.when(nearest)
+
+    # Draw points on the line, and highlight based on selection
+    points = line.mark_point().encode(
+        opacity=when_near.then(alt.value(1)).otherwise(alt.value(0))
+    )
+
+    Europe_mean = df_input.filter(pl.col("state")== "EU27_2020").filter(pl.col("siec") == selected_siec
+        ).with_columns(
+            y2=pl.col("energy_prod")/27 # - min_y
+    )
+    min_value_EU = Europe_mean['y2'].min() - 0.4*Europe_mean['y2'].min()
+    max_value_EU = Europe_mean['y2'].max() + 0.4*Europe_mean['y2'].max()
+    base = alt.Chart(Europe_mean).encode(
+        alt.X('date').title(None)
+    )
+
+    line_EU = base.mark_line(opacity=0.5, stroke='#FF0000', interpolate='monotone', strokeDash=[2,2]).encode(
+        alt.Y('y2', scale=alt.Scale(domain=[min_value_EU, max_value_EU]))#.axis(title='Produzione Media di Energia in Europa')
+    ).interactive()
+    # Draw a rule at the location of the selection
+    rules = alt.Chart(stati_line).transform_pivot(
+        "state",
+        value="energy_prod",
+        groupby=["date"]
+    ).mark_rule(color="gray").encode(
+        x="date",
+        opacity=when_near.then(alt.value(0.3)).otherwise(alt.value(0)),
+        tooltip=[alt.Tooltip(c, type="quantitative") for c in stati_line["state"].unique()],
+    ).add_params(nearest)
+
+    # Put the five layers into a chart and bind the data
+    line_chart = alt.layer(
+        line_EU , line, points, rules
+    ).properties(
+        width=800, height=300
+    ).resolve_scale(
+        y="independent"
+    )
+    line_chart
+
+selected_siec = select_siec()
+countries = get_first_5_countries(df_prod, selected_siec)
+
+# lineplot_prod(df_prod_pred, countries, selected_siec)
+
+## Area Chart ##################################################################################################
+def area_chart(df_prod_pred, selected_single_state, area_list):
+    df_prod_pred = pl.concat([df_prod_pred, pred_state(selected_single_state)])
+    # df_prod_pred_A = df_from_M_to_A(df_prod_pred)
+
+    stati_line = df_prod_pred.filter(
+        pl.col("state") == selected_single_state,
+        pl.col("siec").is_in(area_list),
+        pl.col("date") > pl.datetime(2017, 1, 1))
+
+    nearest = alt.selection_point(nearest=True, on="pointerover",
                               fields=["date"], empty=False)
 
-min_value_2 = stati['energy_prod'].min() - 0.2*stati['energy_prod'].min()
-max_value_2 = stati['energy_prod'].max() + 0.2*stati['energy_prod'].max()
+    selectors = alt.Chart(stati_line).mark_point().encode(
+        x="date",
+        opacity=alt.value(0),
+    ).add_params(
+        nearest
+    )
+    when_near = alt.when(nearest)
 
-# The basic line
-line = alt.Chart(stati).mark_line(interpolate="basis").encode(
-    x="date",
-    #y="energy_prod",
-    y=alt.Y('energy_prod:Q', scale=alt.Scale(domain=[min_value_2, max_value_2])).axis(title='ciao'),
-    #color="unique_id"
-    color="state"
-)
+    color_palette = alt.Scale(
+        domain=['RA000', 'CF', 'X9900', 'N9000'],
+        range=['#00b25d', '#b51d14', '#cacaca', '#ddb310']
+    )
+
+    area = alt.Chart(stati_line
+        ).mark_area(
+            opacity=0.5,
+            interpolate='step-after',
+            line=True
+        ).encode(
+            x="date:T",
+            y=alt.Y("energy_prod:Q").stack(True),
+            color=alt.Color("siec:N", scale = color_palette)
+    )
+
+    # Draw points on the line, and highlight based on selection
+    points = area.mark_point().encode(
+        opacity=when_near.then(alt.value(1)).otherwise(alt.value(0))
+    )
+
+    # Draw text labels near the points, and highlight based on selection
+    text = area.mark_text(align="left", dx=5, dy=-5).encode(
+        text=when_near.then("energy_prod:Q").otherwise(alt.value(" "))
+    )
+
+    # Draw a rule at the location of the selection
+    rules = alt.Chart(stati_line).mark_rule(color="gray").encode(
+        x="date",
+    ).transform_filter(
+        nearest
+    )
+
+    area_chart = alt.layer(
+        area, selectors, points, rules, text
+    ).properties(
+        width=800, height=500
+    ).resolve_scale(
+        y="shared"
+    )
+    area_chart
+
+# df_prod_pred, df_prod_pred_A = area_chart(df_prod_pred, df_prod_pred_A, selected_single_state, area_list)
+
+## Barchart consumption ########################################################################################
+def barchart_cons(df_input, df_cons_pred, year, list_consuption):
+    countries = get_first_5_countries(df_input, "FC")
+    selected_multi_state = select_multi_state(df_input, countries)
+    for state in selected_multi_state:
+        for consuption in list_consuption:
+            df_cons_pred = pl.concat([df_cons_pred, pred_cons(consuption, state)])
+    df_input = df_from_M_to_A(df_cons_pred)
+
+    stati_bar = df_input.filter(
+        pl.col("state").is_in(selected_multi_state),
+        pl.col("date") == year,
+        # pl.col("nrg_bal") != "FC"
+        )
+
+    stati_bar = stati_bar.with_columns(
+        percentage = (pl.col("energy_cons") / pl.col("energy_cons").filter(pl.col("nrg_bal") == "FC").sum()) * 100
+    ).filter(pl.col("nrg_bal") != "FC")
+
+    bars = alt.Chart(stati_bar).mark_bar().encode(
+        x=alt.X('energy_cons:Q').stack("normalize"),#.stack('zero'), 
+        y=alt.Y('state:N'),
+        color=alt.Color('nrg_bal:N')
+    )
     
+    text = alt.Chart(stati_bar).mark_text(dx=-6, dy=3, color='white').encode(
+        x=alt.X('energy_cons:Q').stack('normalize'),
+        y=alt.Y('state:N'),
+        detail='nrg_bal:N',
+        text=alt.Text('percentage:Q', format='.1%')
+    )
 
-# Transparent selectors across the chart. This is what tells us
-# the x-value of the cursor
-selectors = alt.Chart(stati).mark_point().encode(
-    x="date",
-    opacity=alt.value(0),
-).add_params(
-    nearest
-)
-when_near = alt.when(nearest)
+    bar_plot = alt.layer(
+        bars, text
+    ).properties(
+        width=800, height=300
+    )
+    bar_plot
 
-# Draw points on the line, and highlight based on selection
-points = line.mark_point().encode(
-    opacity=when_near.then(alt.value(1)).otherwise(alt.value(0))
-)
+## Lineplot Deficit ############################################################################################
 
-# Draw text labels near the points, and highlight based on selection
-text = line.mark_text(align="left", dx=5, dy=-5).encode(
-    text=when_near.then("energy_prod:Q").otherwise(alt.value(" "))
-)
+def last_date(df_input, state):
+    last_date = df_input.filter(pl.col("state")==state).agg(pl.col("date").max().alias("last_date"))
+    return last_date
 
-# Draw a rule at the location of the selection
-rules = alt.Chart(stati).mark_rule(color="gray").encode(
-    x="date",
-).transform_filter(
-    nearest
-)
+def lineplot_deficit(df_input, df_cons_pred):
+    # per etichetta nome: line + last_price + company_name
+    # per linea verticale: x rules
+    # per quadrato grigio: rect
+    df_input = df_input.with_columns(
+        predicted = pl.when(pl.col("date") > pl.datetime(2023, 1, 1)).then(pl.lit(True)).otherwise(pl.lit(False)),
+        deficit = pl.col("deficit").cast(pl.Int64)
+    )
+    # countries = get_first_5_countries(df_input, "def_id")
+    countries = ["IT", "DE", "FR", "ES"]
+    base = alt.Chart(df_input.filter(pl.col("state").is_in(countries))#, pl.col("date")<=pl.datetime(2023,1,1))
+    ).encode(
+        alt.Color("state").legend(None)
+    ).transform_filter(
+        "datum.state !== 'EU27_2020'"
+    ).properties(
+        width=500
+    )
 
-# Creazione Line Chart
-Europe_tot = df_combined.filter(pl.col("state")== "EU27_2020").filter(pl.col("siec") == selected_siec
-    ).with_columns(
-        y2=pl.col("energy_prod")/27 # - min_y
-)
-min_value_EU = Europe_tot['y2'].min() - 0.2*Europe_tot['y2'].min()
-max_value_EU = Europe_tot['y2'].max() + 0.2*Europe_tot['y2'].max()
+    # line_2 = alt.Chart(df_input.filter(pl.col("date")>=pl.datetime(2023,1,1), pl.col("state").is_in(countries))).mark_line(strokeDash=[12, 6], size=2).encode(
+    #     x="date",
+    #     y="deficit",
+    #     color="state"
+    # )
+    st.write(df_input)
+    line = base.mark_line().encode(
+        x="date",
+        y="deficit",
+        strokeDash="predicted:N"
+        )
 
-base = alt.Chart(Europe_tot).encode(
-    alt.X('date').title(None)
-)
+    last_price = base.mark_circle().encode(
+        alt.X("last_date['date']:T"),
+        alt.Y("last_date['deficit']:Q")
+    ).transform_aggregate(
+        last_date="argmax(date)",
+        groupby=["state"]
+    )
 
-line_EU = base.mark_line(opacity=0.5, stroke='#FF0000', interpolate='monotone', strokeDash=[2,2]).encode(
-    #alt.Y('y2', scale=alt.Scale(domain=[4000, 12000])).axis(title='Produzione Totale di Energia in Europa')
-    alt.Y('y2', scale=alt.Scale(domain=[min_value_EU, max_value_EU]))#.axis(title='Produzione Media di Energia in Europa')
-)
+    source2 = [
+        {"start": "2023", "end": "2027"},
+    ]
 
-# Put the five layers into a chart and bind the data
-prova = alt.layer(
-    line_EU, line, selectors, points, rules, text
-).properties(
-    width=800, height=300
-).resolve_scale(
-    y="independent"
-)
-prova 
+    source2_df = pl.DataFrame(source2)
 
-# Draw a rule at the location of the selection
-rules2 = alt.Chart(stati).transform_fold(
-    ["state"],
-    as_=["key", "value"]
-).mark_rule(color="gray").encode(
-    x="date:T",
-    opacity=when_near.then(alt.value(0.3)).otherwise(alt.value(0)),
-    tooltip=[alt.Tooltip("value:Q", title="energy_prod")],
-).add_params(nearest)
+    xrule = (
+        alt.Chart(source2_df)
+        .mark_rule(color="grey", strokeDash=[12, 6], size=2, opacity=0.4)
+        #.encode(x=alt.datum(alt.DateTime(year=2023)))
+        .encode(x="start:T")
+    )
+    
+    rect = alt.Chart(source2_df).mark_rect(color="lightgrey", opacity=0.4).encode(
+        x="start:T",
+        x2="end:T",
+    )
 
+    company_name = last_price.mark_text(align="left", dx=4).encode(text="state")
 
-# Put the five layers into a chart and bind the data
-prova2 = alt.layer(
-    line_EU, line, selectors, points, rules2, text
-).properties(
-    width=800, height=300
-).resolve_scale(
-    y="independent"
-)
-prova2
-#################################################################################
+    # Transparent selectors across the chart. This is what tells us
+    # the x-value of the cursor
+    nearest = alt.selection_point(nearest=True, on="pointerover",
+                              fields=["date"], empty=False)
 
+    selectors = alt.Chart(df_input).mark_point().encode(
+        x="date:T",
+        opacity=alt.value(0),
+    ).add_params(
+        nearest
+    )
+    when_near = alt.when(nearest)
 
-# nearest2 = alt.selection_point(nearest=True, on="pointerover",
-#                               fields=["date"], empty=False)
+    # Draw points on the line, and highlight based on selection
+    points = line.mark_point().encode(
+        opacity=when_near.then(alt.value(1)).otherwise(alt.value(0))
+    )
 
-# # The basic line
-# line2 = alt.Chart(x).mark_line(interpolate="basis").encode(
-#     x="date",
-#     y="energy_prod",
-#     color="unique_id"
-# )
-# # Put the five layers into a chart and bind the data
-# prova2 = alt.layer(
-#     line2
-# ).properties(
-#     width=800, height=300
-# ).resolve_scale(
-#     y="independent"
-# ).encode(
-#     strokeDash="pred:N"
-# )
+    # Draw text labels near the points, and highlight based on selection
+    text = line.mark_text(align="left", dx=5, dy=-10).encode(
+        text=when_near.then("deficit:Q").otherwise(alt.value(" "))
+    )
 
-# prova2
+    # Draw a rule at the location of the selection
+    rules = alt.Chart(df_input).mark_rule(color="gray").encode(
+        x="date:T",
+    ).transform_filter(
+        nearest
+    )
 
-# annual_production2 = (
-#     x.with_columns(year=pl.col("date").dt.year())
-#     .group_by(["unique_id", "year"])
-#     .agg(y=pl.sum("energy_prod"))
-#     .sort(["unique_id", "year"])
-#     #.filter(pl.col("unique_id") != "EU27_2020")
-# )
+    chart = alt.layer( rect , xrule , line , last_price  , selectors , points , text , rules , company_name).encode(
+        x=alt.X().title("date"),
+        y=alt.Y().title("deficit"))
+    # ).resolve_scale(
+    #     x="shared"
+    # )
 
-# st.write("""
-# ## Produzione stimata totale annuale per ogni nazione
-# """)
-
-# selected_year2 = st.select_slider(
-#     "Seleziona un anno",
-#     annual_production2["year"].unique(),
-#     value = 2024
-# )
-
-# annual_production2 = annual_production2.filter(
-#     pl.col("year") == selected_year)
+    chart# + line_2
 
 
-# select = alt.selection_point(name="select", on="click")
-# highlight = alt.selection_point(name="highlight", on="pointerover", empty=False)
+## Implementazione Pagine ######################################################################################
 
-# stroke_width = (
-#     alt.when(select).then(alt.value(2, empty=False))
-#     .when(highlight).then(alt.value(1))
-#     .otherwise(alt.value(0))
-# )
+def page_deficit():
+    st.title("Pagina Deficit/Surplus")
+    year = select_year(df_A)
+    mappa(df_A, year)
+    barchart_classifica(df_A)
+    lineplot_deficit(df_A, df_cons_pred)
 
-# prova3 = alt.Chart(x, height=200).mark_bar(
-#     fill="#4C78A8", stroke="black", cursor="pointer"
-# ).encode(
-#     x="unique_id",
-#     y="energy_prod",
-#     fillOpacity=alt.when(select).then(alt.value(1)).otherwise(alt.value(0.3)),
-#     strokeWidth=stroke_width,
-# ).configure_scale(bandPaddingInner=0.2).add_params(select, highlight)
+def page_production():
+    st.title("Pagina Produzione")
+    year = select_year(df_prod_pred_A)
+    mappa(df_prod_pred_A, year)
+    lineplot_prod(df_prod_pred, countries, selected_siec)
+    selected_single_state = select_state()
 
-# prova3
+    area_chart(df_prod_pred, selected_single_state, area_list)
+
+def page_consumption():
+    st.title("Pagina Consumo")
+    year = select_year(df_cons_pred_A)
+    mappa(df_cons_pred_A, year)
+    selected_single_state = select_state()
+    barchart_cons(df_cons_pred_A, df_cons_pred, year, list_consuption)
+    st.write(f"""
+    ### Consumo di energia nei vari settori per un singolo stato europeo.
+     """)
+    line_chart_with_IC(df_cons_pred, df_cons_pred_A, selected_single_state)
+
+
+pg = st.navigation([
+    st.Page(page_deficit, title="First page"),
+    st.Page(page_production, title="Second page"),
+    st.Page(page_consumption, title="Third page"),
+])
+pg.run()
