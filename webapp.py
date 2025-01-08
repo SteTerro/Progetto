@@ -145,7 +145,7 @@ def select_state():
     state = st.selectbox(
         "Seleziona uno stato",
         df_prod["state"].unique().sort(),
-        default="IT"
+        index = 9
     )
     return state
 
