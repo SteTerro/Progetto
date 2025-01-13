@@ -2,20 +2,21 @@ import streamlit as st
 import polars as pl
 import altair as alt
 import country_converter as cc
-import datetime as dt
+import countryinfo as ci
 
 from statsforecast import StatsForecast
 from statsforecast.models import AutoARIMA, AutoETS
 
 url_consumption = "https://ec.europa.eu/eurostat/api/dissemination/sdmx/2.1/data/nrg_cb_e?format=TSV&compressed=true"
 url_productivity = "https://ec.europa.eu/eurostat/api/dissemination/sdmx/2.1/data/nrg_cb_pem?format=TSV&compressed=true"
-
+url_population = "https://ec.europa.eu/eurostat/api/dissemination/sdmx/2.1/data/demo_gind?format=TSV&compressed=true"
+url_pop_pred = "https://ec.europa.eu/eurostat/api/dissemination/sdmx/2.1/data/proj_stp24?format=TSV&compressed=true"
 st.write(f"""
 # Consumo di energia in Europa""")
 
 ## Funzioni lettura DataFrame #################################################################################
 @st.cache_data
-def get_data_consumption(url):
+def get_data_population(url):
     data = (
         pl.read_csv(
             url,
@@ -23,43 +24,92 @@ def get_data_consumption(url):
             null_values=["", ":", ": "],
             )
         .select(
-            pl.col("freq,nrg_bal,siec,unit,geo\\TIME_PERIOD")
+            # pl.col("freq,nrg_bal,siec,unit,geo\\TIME_PERIOD")
+            pl.col("freq,indic_de,geo\\TIME_PERIOD")
             .str.split(",")
-            .list.to_struct(fields=["freq","nrg_bal","siec", "unit", "state"])
+            .list.to_struct(fields=["freq","indic_de","state"])
             .alias("combined_info"),
-            pl.col("*").exclude("freq,nrg_bal,siec,unit,geo\\TIME_PERIOD")
+            pl.col("*").exclude("freq,indic_de,geo\\TIME_PERIOD")
         )
         .unnest("combined_info")
         .unpivot(
-            index=["freq","nrg_bal","siec", "unit", "state"],
-            value_name="energy_cons",
+            index=["freq","indic_de","state"],
+            value_name="population",
             variable_name="date"
         ).with_columns(
             date=pl.col("date")
             .str.replace(" ", "")
             .str.strptime(pl.Date, '%Y'),#, strict=False).cast(pl.Date),
-            energy_cons=pl.col("energy_cons")
+            population=pl.col("population")
             .str.replace(" ", "")
             .str.replace("p", "")
-            .str.replace("u", "")
+            .str.replace("b", "")
             .str.replace("e", "")
-            .str.replace("n", "")
-            .str.replace("d", "")
+            .str.replace("ep", "")
+            .str.replace("be", "")
+            .str.replace("bep", "")
             .str.replace(":", "123456789")
             .cast(pl.Float64),
-            unique_id=pl.col("state")+";"+pl.col("nrg_bal"),
             state = pl.col("state")
-            .str.replace("EL", "GR")
+            .str.replace("EL", "GR"),
         )
         .filter(
-            pl.col("energy_cons").is_not_null(),
-            pl.col("energy_cons") != 123456789,
-            pl.col("state")!="EA20",
-            pl.col("nrg_bal").is_in(["FC", "FC_IND_E" , "FC_TRA_E", "FC_OTH_CP_E", "FC_OTH_HH_E", "FC_OTH_AF_E"]),
+            pl.col("population").is_not_null(),
+            pl.col("population") != 123456789,
+            pl.col("indic_de") == "AVG"
         )
         .drop("freq",
-              "unit",
-              "siec")
+              "indic_de")
+        .sort("state", "date") 
+    )
+    return data
+
+@st.cache_data
+def get_data_pop_pred(url):
+    data = (
+        pl.read_csv(
+            url,
+            separator="\t",
+            null_values=["", ":", ": "],
+            )
+        .select(
+            pl.col("freq,indic_de,projection,geo\\TIME_PERIOD")
+            .str.split(",")
+            .list.to_struct(fields=["freq","indic_de","projection","state"])
+            .alias("combined_info"),
+            pl.col("*").exclude("freq,indic_de,projection,geo\\TIME_PERIOD")
+        )
+        .unnest("combined_info")
+        .unpivot(
+            index=["freq","indic_de","projection","state"],
+            value_name="population",
+            variable_name="date"
+        ).with_columns(
+            date=pl.col("date")
+            .str.replace(" ", "")
+            .str.strptime(pl.Date, '%Y'),#, strict=False).cast(pl.Date),
+            population=pl.col("population")
+            .str.replace(" ", "")
+            .str.replace("p", "")
+            .str.replace("b", "")
+            .str.replace("e", "")
+            .str.replace("ep", "")
+            .str.replace("be", "")
+            .str.replace("bep", "")
+            .str.replace(":", "123456789")
+            .cast(pl.Float64),
+            state = pl.col("state")
+            .str.replace("EL", "GR"),
+        )
+        .filter(
+            pl.col("population").is_not_null(),
+            pl.col("population") != 123456789,
+            pl.col("indic_de") == "JAN",
+            pl.col("projection") == "BSL",
+        )
+        .drop("freq",
+              "indic_de",
+              "projection")
         .sort("state", "date") 
     )
     return data
@@ -111,6 +161,56 @@ def get_data_productivity(url):
             )
         .drop("freq",
               "unit")
+        .sort("state", "date") 
+    )
+    return data
+
+@st.cache_data
+def get_data_consumption(url):
+    data = (
+        pl.read_csv(
+            url,
+            separator="\t",
+            null_values=["", ":", ": "],
+            )
+        .select(
+            pl.col("freq,nrg_bal,siec,unit,geo\\TIME_PERIOD")
+            .str.split(",")
+            .list.to_struct(fields=["freq","nrg_bal","siec", "unit", "state"])
+            .alias("combined_info"),
+            pl.col("*").exclude("freq,nrg_bal,siec,unit,geo\\TIME_PERIOD")
+        )
+        .unnest("combined_info")
+        .unpivot(
+            index=["freq","nrg_bal","siec", "unit", "state"],
+            value_name="energy_cons",
+            variable_name="date"
+        ).with_columns(
+            date=pl.col("date")
+            .str.replace(" ", "")
+            .str.strptime(pl.Date, '%Y'),#, strict=False).cast(pl.Date),
+            energy_cons=pl.col("energy_cons")
+            .str.replace(" ", "")
+            .str.replace("p", "")
+            .str.replace("u", "")
+            .str.replace("e", "")
+            .str.replace("n", "")
+            .str.replace("d", "")
+            .str.replace(":", "123456789")
+            .cast(pl.Float64),
+            unique_id=pl.col("state")+";"+pl.col("nrg_bal"),
+            state = pl.col("state")
+            .str.replace("EL", "GR")
+        )
+        .filter(
+            pl.col("energy_cons").is_not_null(),
+            pl.col("energy_cons") != 123456789,
+            pl.col("state")!="EA20",
+            pl.col("nrg_bal").is_in(["FC", "FC_IND_E" , "FC_TRA_E", "FC_OTH_CP_E", "FC_OTH_HH_E", "FC_OTH_AF_E"]),
+        )
+        .drop("freq",
+              "unit",
+              "siec")
         .sort("state", "date") 
     )
     return data
@@ -442,6 +542,12 @@ def adjust_pred_cons(pred):
 ## Creazione Dataframe ########################################################################################
 df_prod = get_data_productivity(url_productivity)
 df_cons = get_data_consumption(url_consumption)
+pop = get_data_population(url_population)
+pop_pred = get_data_pop_pred(url_pop_pred)
+
+pop = pl.concat([pop, pop_pred], how="vertical_relaxed").group_by(["state", "date"]).agg(
+    pl.col("population").mean().alias("population")
+)
 
 top4_EU = ["DE", "FR", "IT", "ES"]
 list_consuption = ["FC", "FC_IND_E" , "FC_TRA_E", "FC_OTH_CP_E", "FC_OTH_HH_E", "FC_OTH_AF_E"]
@@ -461,6 +567,7 @@ df_prod_pred_A = df_from_M_to_A(df_prod_pred)
 df_cons_pred_A = df_from_M_to_A(df_cons_pred)
 
 df_A = get_df_A(df_prod_pred_A, df_cons_pred_A)
+
 
 ## Mappa ######################################################################################################
 def mappa(df_input, year, selected_bal):
@@ -865,12 +972,11 @@ def line_chart_deficit(df_input):
 ## Grafici "Caratteristici" ####################################################################################
 ## Area Chart ##################################################################################################
 def area_chart(df_prod_pred, selected_single_state, prod_list):
-    df_prod_pred = pl.concat([df_prod_pred, pred_state(selected_single_state)], how="vertical_relaxed")
-    df_prod_pred = cast_int_prod(df_prod_pred)
-
+    df_prod_pred_updated = pl.concat([df_prod_pred, pred_state(selected_single_state)], how="vertical_relaxed")
+    df_prod_pred_updated = cast_int_prod(df_prod_pred_updated)
     # Creazione del DataFrame che verrà utilizzato per il grafico
     # Filtro per data, seleziono solo i dati a partire dal 2017 perchè prima di quella data non veniva segnata la produzione di energia rinnovabile 
-    stati_line = df_prod_pred.filter(
+    stati_line = df_prod_pred_updated.filter(
         pl.col("state") == selected_single_state,
         pl.col("siec").is_in(prod_list),
         pl.col("date") > pl.datetime(2017, 1, 1)
@@ -904,9 +1010,14 @@ def area_chart(df_prod_pred, selected_single_state, prod_list):
     source_date_df = pl.DataFrame(source_date)
 
     # Creazione del rettangolo grigio
-    rect = alt.Chart(source_date_df).mark_rect(color="lightgrey", opacity=0.4).encode(
-        x="start:T",
-        x2="end:T",
+    # rect = alt.Chart(source_date_df).mark_rect(color="lightgrey", opacity=0.4).encode(
+    #     x="start:T",
+    #     x2="end:T",
+    # )
+# .filter(pl.col("predicted")==True)
+    rect = alt.Chart(stati_line.filter(pl.col("predicted") == True)).mark_rect(color="lightgrey", opacity=0.4).encode(
+        x="date:T",
+        # x2="end:T",
     )
     
     # Linea verticale tratteggiata per indicare l'inizio del pannello del forecast
@@ -949,25 +1060,6 @@ def area_chart(df_prod_pred, selected_single_state, prod_list):
     points = area.mark_point().encode(
         opacity=when_near.then(alt.value(1)).otherwise(alt.value(0))
     )
-
-    # selectors = alt.Chart(stati_line).mark_point().encode(
-    #     x="date",
-    #     opacity=alt.value(0),
-    # ).add_params(
-    #     nearest
-    # )
-    
-    # # Draw text labels near the points, and highlight based on selection
-    # text = area.mark_text(align="left", dx=5, dy=-5).encode(
-    #     text=when_near.then("energy_prod:Q").otherwise(alt.value(" "))
-    # )
-
-    # # Draw a rule at the location of the selection
-    # rules = alt.Chart(stati_line).mark_rule(color="gray").encode(
-    #     x="date",
-    # ).transform_filter(
-    #     nearest
-    # )
     
     rules = alt.Chart(stati_line).transform_pivot(
         "siec",
@@ -984,86 +1076,206 @@ def area_chart(df_prod_pred, selected_single_state, prod_list):
         rect, xrule, text_left, text_right,  lable_circle, lable_name, area, points, rules
     ).properties(
         width=800, height=400
+    ).resolve_scale(
+        x="shared"
     )
     area_chart
+    return df_prod_pred_updated
 
 ## Barchart Production #########################################################################################
-def bar_chart(df_prod_pred, selected_single_state, prod_list_2, year):
-    st.write(f"Produzione energetica annuale in {selected_single_state} nel {year.cast(pl.Int32)}")
-
-    df_prod_pred = pl.concat([df_prod_pred, pred_state(selected_single_state)], how="vertical_relaxed")
-    df_prod_pred = cast_int_prod(df_prod_pred)
-
-    stati_line = df_prod_pred.filter(
+def bar_chart(df_prod_pred_updated, selected_single_state, prod_list_2, year):
+    # df_prod_pred = pl.concat([df_prod_pred, pred_state(selected_single_state)], how="vertical_relaxed")
+    df_prod_pred_A_updated = df_from_M_to_A(df_prod_pred_updated)
+    # df_prod_pred_A = cast_int_prod(df_prod_pred_A)
+    
+    stati_line = df_prod_pred_A_updated.filter(
         pl.col("state") == selected_single_state,
         pl.col("siec").is_in(prod_list_2),
         pl.col("date") == year
+    ).with_columns(
+        percentage= ((pl.col("energy_prod") / pl.col("energy_prod").sum()) * 100).round(3),   
     )
 
     bars = alt.Chart(stati_line).mark_bar().encode(
-        x=alt.X('sum(energy_prod):Q').stack('zero').axis(None),
-        y=alt.Y('state:N'),
+        x=alt.X('state:N').axis(None),
+        y=alt.Y('sum(energy_prod):Q').stack('zero').axis(None),
         color=alt.Color('siec', scale=alt.Scale(scheme='tableau10')),
     )
-    
-    # text = alt.Chart(stati_line).mark_text(dx=-150, dy=30, color='white').encode(
-    #     x=alt.X('sum(energy_prod):Q').stack('zero'),
-    #     y=alt.Y('state:N'),
-    #     detail='siec:N',
-    #     text=alt.Text('sum(energy_prod):Q', format='.1f'),
-    # )
 
-    predicate = alt.datum.energy_prod > 300
-    text = bars.mark_text(baseline="middle",dx = -160
-    ).encode(
-        text="energy_prod:Q",
-        color=alt.condition(predicate, alt.value("white"), alt.value(""))
+    highlight = alt.selection_point(on='pointerover', fields=['siec'], nearest=True)
+
+    points = bars.mark_bar().encode(
+        opacity=alt.value(0)
+    ).add_params(
+        highlight
+    )
+# 249711
+    bar_highlated = bars.mark_bar().encode(
+        opacity=alt.condition(highlight, alt.value(1), alt.value(0.6))
     )
 
+    bar = alt.layer(points, bar_highlated).properties(
+        width=100, height=450
+    )
 
-    bar_prod = alt.layer(bars).properties(
-        width=800, height=150)
+    # Crea l'unique_id per filtrare il dataframe
+    filter = selected_single_state + ";" + "TOTAL"
 
-    bar_prod
+    # Valore di confontro per vedere se mancano dati
+    # Il valore preso è la produzione totale originale, è stato utilizzato il dataset originale, usato anche per la mappa
+    total_prod_og = df_prod_pred_A.filter(
+        pl.col("unique_id") == filter, 
+        pl.col("date")==year
+    ).select(pl.col("energy_prod").cast(pl.Int32)
+    ).unique().item()
+
+    # Calcola la percentuale totale
+    total_percentage = stati_line["percentage"].sum()
+    #Calcola la produzione totale
+    total_prod = stati_line["energy_prod"].sum()
+    st.write(f"Total percentage: {total_percentage}%")
+    st.write(f"Total production: {total_prod}")
+    st.write(f"Total production original: {total_prod_og}")
+
+    
+    # Se la differenza tra la produzione totale e la produzione totale originale è maggiore del 10% (soglia scelta arbitrariamente da me) allora ci sono dati mancanti
+    if total_prod > (total_prod_og + 0.05*total_prod_og):
+        extra_percentage = ((total_prod - total_prod_og) / total_prod_og) * 100
+        st.write(f"Ops! Qualcosa è andato storto! Percentuale di dati extra rispetto a quelli attesi: {extra_percentage:.2f}%")
+        st.warning("Ops! Qualcosa è andato storto, ")
+    elif total_prod < (total_prod_og - 0.05*total_prod_og):
+        missing_percentage = ((total_prod_og - total_prod) / total_prod_og) * 100
+        st.warning(f"Presenti dati mancanti! Percentuale dei dati mancanti: {missing_percentage:.2f}%")
+
+
+    percentage_col_name = "percentage_" + selected_single_state
+    energy_prod_col_name = "energy_prod_" + selected_single_state
+    col1, col2 = st.columns(2)
+    with col1:
+        st.dataframe(
+            stati_line.sort("siec").pivot(values=["percentage", "energy_prod"], columns="state", index="siec"),
+            column_config={
+                "siec": st.column_config.TextColumn(
+                    "Fonte",
+                    help="Fonte di energia"
+                ),
+                percentage_col_name: st.column_config.NumberColumn(
+                    "Percentuale",
+                    format="%f",
+                ),
+                energy_prod_col_name: st.column_config.NumberColumn(
+                    "Energia prodotta",
+                    format="%d"
+                ),
+            },
+            hide_index=True,
+        )
+    with col2:
+        st.altair_chart(bar, use_container_width=True)
+
+def get_population(state):
+    country = ci(state)
+    country.population()
 
 ## Barchart consumption ########################################################################################
-def barchart_cons(df_input, df_cons_pred, year, list_consuption):
+def barchart_cons(df_input, df_cons_pred, year, list_consuption, selected_single_state):
     selected_multi_state = select_multi_state(df_input, True)
     for state in selected_multi_state:
         for consuption in list_consuption:
             df_cons_pred = pl.concat([df_cons_pred, pred_cons(consuption, state)], how="vertical_relaxed")
     df_input = df_from_M_to_A(df_cons_pred)
     df_input = cast_int_cons(df_input)
+    
+    df_input = df_input.join(pop, on = ["state", "date"], how = "inner"
+    ).with_columns(
+        energy_cons_per_capita = (pl.col("energy_cons") / pl.col("population")).round(5),
+    )
 
     stati_bar = df_input.filter(
         pl.col("state").is_in(selected_multi_state),
         pl.col("date") == year,
-        # pl.col("nrg_bal") != "FC"
+        pl.col("nrg_bal") != "FC"
         )
 
-    stati_bar = stati_bar.with_columns(
-        percentage = (pl.col("energy_cons") / pl.col("energy_cons").filter(pl.col("nrg_bal") == "FC").sum()) * 100
-    ).filter(pl.col("nrg_bal") != "FC")
-
-    bars = alt.Chart(stati_bar).mark_bar().encode(
-        x=alt.X('energy_cons:Q').stack("normalize"),#.stack('zero'), 
-        y=alt.Y('state:N'),
-        color=alt.Color('nrg_bal:N')
-    )
+    EU_mean = df_input.filter(pl.col("state") == "EU27_2020", pl.col("date") == year).rename({"energy_cons_per_capita": "europe_mean"}).drop("state", "energy_cons", "population", "predicted", "unique_id")#.item()
     
-    text = alt.Chart(stati_bar).mark_text(dx=-6, dy=3, color='white').encode(
-        x=alt.X('energy_cons:Q').stack('normalize'),
-        y=alt.Y('state:N'),
-        detail='nrg_bal:N',
-        text=alt.Text('percentage:Q', format='.1%')
+    stati_bar = stati_bar.join(EU_mean, on = ["date", "nrg_bal"], how = "inner")
+
+    bar = alt.Chart(stati_bar).mark_bar(color="lightgray").encode(
+        x=alt.X('energy_cons_per_capita:Q', sort='ascending'),
+        y=alt.Y('state').axis(None),
     )
 
-    bar_plot = alt.layer(
-        bars, text
+    highlight = bar.mark_bar(color="#FF0000").encode(
+        x2=alt.X2("europe_mean:Q")
+    ).transform_filter(
+        alt.datum.energy_cons_per_capita > alt.datum.europe_mean
+    )
+
+    xrule = (
+        alt.Chart(stati_bar)
+        .mark_rule(color="black", strokeDash=[1, 1], size=1, opacity=0.4)
+        .encode(
+            x="europe_mean:Q"
+        )
+    ).transform_filter(
+        alt.datum.energy_cons_per_capita > alt.datum.europe_mean
+    )
+
+    text = bar.mark_text(align='left', dx=30).encode(
+        text='energy_cons_per_capita:Q',
+        color = "state:N"
+    )
+    text_2 = bar.mark_text(align='left', dx=12).encode(
+        text='state:N',
+        color = "state:N"
+    )
+    layered_chart = alt.layer(bar, text, text_2, highlight, xrule
+    ).properties(
+        width=600, height=80)
+
+    faceted_chart = layered_chart.facet(
+        row='nrg_bal:N'
+    )
+    faceted_chart 
+    return df_input
+    #############################################################################################################
+    
+## Barchart Consumption 2 ######################################################################################
+def barchart_cons_2(df_input, year, selected_single_state):
+    stati_bar_2 = df_input.filter(
+        pl.col("date") == year,
+        pl.col("state") == selected_single_state,
+        pl.col("nrg_bal") != "FC"
+    ).with_columns(
+        percentage = ((pl.col("energy_cons_per_capita") / pl.col("energy_cons_per_capita").sum()) * 100).round(2)#.cast(pl.Int32),
+    )
+    st.write(stati_bar_2.select(pl.col(["percentage", "energy_cons_per_capita", "nrg_bal"])))
+
+    bar_2 = alt.Chart(stati_bar_2).mark_bar(color="lightgray").encode(
+        x=alt.X('percentage:Q'),
+        y=alt.Y('nrg_bal', sort = 'x', axis = None),
+        # color="nrg_bal:N",
+    )
+    bar_3 = alt.Chart(stati_bar_2).mark_bar().encode(
+        x=alt.X('percentage:Q'),
+        y=alt.Y('nrg_bal', sort = '-x', axis = None),
+        color="nrg_bal:N",
     ).properties(
         width=800, height=400
     )
-    bar_plot
+
+    rect = bar_3.mark_bar(color="lightgray", opacity=0.4).encode(
+        x2 = alt.X2('percentage_max:Q'),
+        y=alt.Y('nrg_bal', sort = '-x', axis = None),
+    )
+    rect
+    bar_3 + rect
+
+## Barchart Omino #############################################################################################
+# def barchart_omino(df_input, year, selected_single_state):
+    
+
 
 ## Barchart Classifica Deficit ################################################################################
 def barchart_classifica(df_input, year):
@@ -1126,6 +1338,8 @@ def barchart_classifica(df_input, year):
 
 ## Implementazione Pagine ######################################################################################
 
+#Rect deve avere come X date a partire dal databse filtrato
+
 def page_deficit():
     st.title("Pagina Deficit/Surplus")
     st.write(f"""    
@@ -1155,20 +1369,25 @@ def page_deficit():
     Viene anche mostarto il valore medio per l'intera UE.""")
     barchart_classifica(df_comb, year)
     
-    
+my_expander = st.expander(label='Filtro')
+
 def page_production():
     st.title("Pagina Produzione")
     
-    selected_siec = select_type(df_prod)
+    with my_expander:
+        selected_siec = select_type(df_prod)
 
     df_prod_pred = pred_siec(selected_siec).filter(pl.col("date") >= pl.datetime(2017, 1, 1))
     df_prod_pred_A = df_from_M_to_A(df_prod_pred).filter(pl.col("date") >= pl.datetime(2017, 1, 1))
 
+    year_int, year = select_year(df_prod_pred_A)
+
+    # with my_expander:
+    
     st.write(f"""### Analisi della produzione energetica annuale in Europa.
     Analisi della produzione tra vari paesi dell'unione
     """)
 
-    year_int, year = select_year(df_prod_pred_A)
     mappa(df_prod_pred_A, year, selected_siec)
 
     selected_multi_state = select_multi_state(df_prod_pred_A, False)
@@ -1180,8 +1399,8 @@ def page_production():
 
     selected_single_state = select_state()
 
-    area_chart(df_prod_pred, selected_single_state, prod_list)
-    bar_chart(df_prod_pred, selected_single_state, prod_list_2, year)
+    df_prod_pred_updated = area_chart(df_prod_pred, selected_single_state, prod_list)
+    bar_chart(df_prod_pred_updated, selected_single_state, prod_list_2, year)
 
 def page_consumption():
     st.title("Pagina Consumo")
@@ -1195,13 +1414,15 @@ def page_consumption():
     year_int, year = select_year(df_cons_pred_A)
     mappa(df_cons_pred_A, year, selected_nrg_bal)    
     
-    barchart_cons(df_cons_pred_A, df_cons_pred, year, list_consuption)
-    
+    selected_single_state = select_state()
+
+    df_bar_2 = barchart_cons(df_cons_pred_A, df_cons_pred, year, list_consuption, selected_single_state) #DA rimuovere 
+    barchart_cons_2(df_bar_2, year, selected_single_state)
     st.write(f"""
     ### Consumo di energia nei vari settori per un singolo stato europeo.
      """)
-    selected_single_state = select_state()
     line_chart_with_IC(df_cons_pred, selected_single_state)
+    # barchart_omino(df_cons_pred, year, selected_single_state)
 
 pg = st.navigation([
     st.Page(page_deficit, title="Deficit/Surplus"),
