@@ -237,7 +237,6 @@ def get_data_consumption(url):
     return data
 
 # Lettura DataFrame sul deficit/Surplus
-@st.cache_data
 def get_df_A(df_prod_pred_A, df_cons_pred_A):
     df_A = df_prod_pred_A.join(df_cons_pred_A, on = ["state", "date"], how = "inner")
     df_A = df_A.with_columns(
@@ -520,7 +519,7 @@ def pred_state(filtro):
             ).unnest("combined_info").drop("ds")
         
         # Sistemo i dati, se ci sono valori negativi li porto a 0
-        pred = adjust_pred_cons(pred)
+        pred = adjust_pred_prod(pred)
 
         # Ordino i DataFrame così da poter fare il merge
         df_funz = df_funz.select(sorted(df_funz.columns))
@@ -656,8 +655,6 @@ list_consuption = ["FC", "FC_IND_E" , "FC_TRA_E", "FC_OTH_CP_E", "FC_OTH_HH_E", 
 list_productivity = ["TOTAL","X9900","RA000","N9000","CF","CF_R","RA100","RA200","RA300","RA400","RA500_5160","C0000","CF_NR","G3000","O4000XBIO"]
 prod_list_2 = ["X9900","N9000","CF_R","RA100","RA200","RA300","RA400","RA500_5160","C0000","CF_NR","G3000","O4000XBIO"]
 prod_list = ["RA000", "CF", "N9000", "X9900"]
-RA_list = ["CF_R","RA100","RA200","RA300","RA400","RA500_5160"]
-CF_list = ["C0000","CF_NR","G3000","O4000XBIO"]
 
 # Filtri per i DataFrame, seleziono solo i dati relativi all'Unione Europea
 df_prod = EU_filter(df_prod)
@@ -764,8 +761,6 @@ def mappa(df_input, year, selected_bal):
 
 ## Line Chart #################################################################################################
 ## Line Chart con Doppio Asse Y ###############################################################################
-
-# Funzione che crea un grafico a linee con doppio asse Y
 def line_chart_prod(df_input, countries, siec):
 
     # Creazione del DataFrame che verrà utilizzato per il grafico
@@ -779,15 +774,27 @@ def line_chart_prod(df_input, countries, siec):
     line = alt.Chart(stati_line).mark_line(interpolate="basis").encode(
         x="date",
         y="energy_prod:Q",
-        color="state",
+        color = alt.Color("state:N", scale=alt.Scale(scheme="tableau10")),
+        # color="state",
         strokeDash="predicted:N"
     )
+    df_pp = stati_line.filter(pl.col("predicted") == True)
+    st.write(df_pp)
 
+    first_year = df_pp["date"].min()
+    last_year = df_pp["date"].max()
     # Dataframe contente inizio e fine del pannello del forecast
     source_date = [
-        {"start": "2024-10", "end": "2029"},
+        {"start": first_year, "end": last_year},
     ]
     source_date_df = pl.DataFrame(source_date)
+    st.write(source_date_df)
+
+    # Dataframe contente inizio e fine del pannello del forecast
+    # source_date = [
+    #     {"start": "2024-10", "end": "2029"},
+    # ]
+    # source_date_df = pl.DataFrame(source_date)
 
     # Creazione del rettangolo grigio
     rect = alt.Chart(source_date_df).mark_rect(color="lightgrey", opacity=0.4).encode(
@@ -909,13 +916,14 @@ def line_chart_with_IC(df_cons_pred, selected_single_state):
     line = alt.Chart(stati_line).mark_line(interpolate="basis").encode(
         x="date",
         y="energy_cons:Q",
-        color="nrg_bal:N",
+        # color="nrg_bal:N",
+        color = alt.Color("nrg_bal:N", scale=alt.Scale(scheme="category10")),
         strokeDash="predicted:N"
     )
 
     # Dataframe contente inizio e fine del pannello del forecast
     source_date = [
-        {"start": "2023", "end": "2027"},
+        {"start": "2022", "end": "2026"},
     ]
     source_date_df = pl.DataFrame(source_date)
 
@@ -1001,6 +1009,8 @@ def line_chart_with_IC(df_cons_pred, selected_single_state):
     )
     line_chart
 
+    return df_cons_pred
+
 ## line_chart Deficit ##########################################################################################
 def line_chart_deficit(df_input):
     # Seleziono solo gli stati che mi interessano
@@ -1016,7 +1026,8 @@ def line_chart_deficit(df_input):
     line = alt.Chart(stati_line).mark_line(interpolate="basis").encode(
         x="date",
         y="deficit:Q",
-        color="state",
+        # color="state",
+        color = alt.Color("state:N", scale=alt.Scale(scheme="tableau10")),
         strokeDash="predicted:N"
     )
 
@@ -1037,6 +1048,12 @@ def line_chart_deficit(df_input):
         alt.Chart(source_date_df)
         .mark_rule(color="grey", strokeDash=[12, 6], size=2, opacity=0.4)
         .encode(x="start:T")
+    )
+
+    yrule = (
+        alt.Chart(source_date_df)
+        .mark_rule(color="black", strokeDash=[12, 6], size=2, opacity=0.4)
+        .encode(y = alt.datum(0))
     )
     
     # Creazione del testo per indicare "Valori Reali" e "Forecast"
@@ -1063,7 +1080,7 @@ def line_chart_deficit(df_input):
         groupby=["state"]
     )
     # Creazione dell'etichetta
-    lable_name = lable_circle.mark_text(align="left", dx=4).encode(text="state", color="state:N")
+    lable_name = lable_circle.mark_text(align="left", dx=5, fontSize=14).encode(text="state", color="state:N")
 
     # Selettori trasparenti attraverso il grafico. Ci diranno il valore x del cursore
     nearest = alt.selection_point(nearest=True, on="pointerover",
@@ -1094,7 +1111,7 @@ def line_chart_deficit(df_input):
 
     # Creazione del grafico
     line_chart = alt.layer( 
-         rect, xrule, text_left, text_right, lable_circle, lable_name, line, selectors, points, rules, text
+         rect, xrule, yrule, text_left, text_right, lable_circle, lable_name, line, selectors, points, rules, text
     ).encode(
             x=alt.X().title("date"),
             y=alt.Y().title("deficit")
@@ -1141,7 +1158,7 @@ def area_chart(df_prod_pred, selected_single_state, prod_list):
             color=alt.Color("siec:N", scale = color_palette),
             #color = "siec:N",
     )
-
+    
     # Dataframe contente inizio e fine del pannello del forecast
     source_date = [
         {"start": "2024-11", "end": "2028-10"},
@@ -1151,7 +1168,7 @@ def area_chart(df_prod_pred, selected_single_state, prod_list):
     # Creazione del rettangolo grigio
     rect = alt.Chart(stati_line.filter(pl.col("predicted") == True)).mark_rect(color="lightgrey", opacity=0.4).encode(
         x="date:T",
-        # x2="end:T",
+        x2="end:T",
     )    
     # Linea verticale tratteggiata per indicare l'inizio del pannello del forecast
     xrule = (
@@ -1218,8 +1235,171 @@ def area_chart(df_prod_pred, selected_single_state, prod_list):
     area_chart
     return df_prod_pred_updated
 
+def bump_chart(df_input):
+    
+    df_input = df_input.filter(
+        pl.col("state") != "EU27_2020"
+    ).group_by(["state", "date"]).agg(
+        pl.col("deficit").mean().alias("deficit")
+    )
+    st.write(df_input)
+    # highlight = alt.selection_point(on='pointerover', fields=['state'], nearest=True)
+    nearest = alt.selection_point(nearest=True, on="pointerover",
+                              fields=["date"], empty=False)
+
+    stati_rank = pl.DataFrame()
+    for time in df_input["date"].unique():
+        stati_sel = df_input.filter(
+            pl.col("date") == time,
+            ).sort("deficit", descending=True).head(5)
+        stati_rank = pl.concat([stati_rank, stati_sel])
+    # stati_rank = stati_rank.select("state", "date", "deficit", "predicted")
+    st.write(stati_rank)
+
+    # stati_rank_2 = pl.DataFrame()
+    # for time in df_input["date"].unique():
+    #     stati_sel = df_input.filter(
+    #         pl.col("date") == time,
+    #         ).sort("deficit", descending=False).head(5)
+    #     stati_rank_2 = pl.concat([stati_rank_2, stati_sel])
+    # # stati_rank_2 = stati_rank_2.select("state", "date", "deficit")
+    # st.write(stati_rank_2)
+
+    # Dataframe contente inizio e fine del pannello del forecast
+    source_date = [
+        {"start": "2023", "end": "2027"},
+    ]
+    source_date_df = pl.DataFrame(source_date)
+
+    # Creazione del rettangolo grigio
+    rect = alt.Chart(source_date_df).mark_rect(color="lightgrey", opacity=0.4).encode(
+        x="start:T",
+        x2="end:T",
+    )
+
+    # Linea verticale tratteggiata per indicare l'inizio del pannello del forecast
+    xrule = (
+        alt.Chart(source_date_df)
+        .mark_rule(color="grey", strokeDash=[12, 6], size=2, opacity=0.4)
+        .encode(x="start:T")
+    )
+
+    # Creazione del testo per indicare "Valori Reali" e "Forecast"
+    text_left = alt.Chart(source_date_df).mark_text(
+        align="left", dx=-55, dy=-105, color="grey"
+    ).encode(
+        x="start:T",
+        text=alt.value("Valori Reali")
+    )
+    text_right = alt.Chart(source_date_df).mark_text(
+        align="left", dx=5, dy=-105, color="grey"
+    ).encode(
+        x="start:T",
+        text=alt.value("Forecast")
+    )
+
+    ranking_plot = alt.Chart(stati_rank).mark_line(point=True, strokeDash=[4,1]).encode(
+        x=alt.X("date").timeUnit("year").title("date"),
+        y="rank:O",
+        color=alt.Color("state:N"),
+    ).transform_window(
+        rank="rank()",
+        sort=[alt.SortField("deficit", order="descending")],
+        groupby=["date"])
+
+    selectors = alt.Chart(df_input).mark_point().encode(
+        x="date:T",
+        opacity=alt.value(0),
+    ).add_params(
+        nearest
+    )
+    when_near = alt.when(nearest)
+
+    # Draw points on the line, and highlight based on selection
+    points = ranking_plot.mark_point().encode(
+        opacity=when_near.then(alt.value(1)).otherwise(alt.value(0))
+    )
+
+    # Draw text labels near the points, and highlight based on selection
+    text = ranking_plot.mark_text(align="left", dx=5, dy=-6).encode(
+        text=when_near.then("state:N").otherwise(alt.value(" "))
+    )
+
+    # Draw a rule at the location of the selection
+    rules = alt.Chart(df_input).mark_rule(color="gray").encode(
+        x="date:T",
+    ).transform_filter(
+        nearest
+    )   
+
+    classifica = alt.layer(
+        rect, xrule, ranking_plot, selectors, points, rules, text, text_left, text_right
+    ).properties(
+        width=600, height=300
+    )
+    classifica
+
+def pie_chart(df_input, selected_single_state, year):
+    
+    # Creo il DataFrame per il grafico
+    stati_pie = df_input.filter(
+        pl.col("date") == year,
+        pl.col("state") == selected_single_state,
+        pl.col("nrg_bal") != "FC"
+    ).with_columns(
+        # Calcola la percentuale di consumo di energia per ogni tipo di bilancio energetico
+        percentage = ((pl.col("energy_cons") / pl.col("energy_cons").sum()) * 100).round(2)#.cast(pl.Int32),
+    )
+
+    # Creazione del grafico di base
+    base = alt.Chart(stati_pie).mark_arc().encode(
+        theta = alt.Theta("percentage:Q").stack(True),
+        color = alt.Color("nrg_bal:N", scale=alt.Scale(scheme="category10"), legend=None),
+    )
+    # Creo il foro del donut chart
+    pie = base.mark_arc(outerRadius=120, innerRadius=50)
+    # Aggiungo il testo per la percentuale
+    text_percentage = base.mark_text(radius=140, size=15).encode(text=("percentage:Q"))
+
+    pie_chart = alt.layer(
+        pie + text_percentage 
+    ).properties(
+        width=600, height=600
+    )
+    pie_chart
+
+    # Preparo la visualizzazione su due colonne
+    # Preparo i nomi delle colonne
+    percentage_col_name = "percentage_" + selected_single_state
+    energy_prod_col_name = "energy_cons_" + selected_single_state
+    # Scelgo il layout a due colonne
+    col1, col2 = st.columns(2)
+    # Inserisco i dati nel primo pannello
+    with col1:
+        st.dataframe(
+            stati_pie.sort("nrg_bal").pivot(values=["percentage", "energy_cons"], columns="state", index="nrg_bal"),
+            column_config={
+                "nrg_bal": st.column_config.TextColumn(
+                    "Fonte",
+                    help="Fonte di energia"
+                ),
+                percentage_col_name: st.column_config.NumberColumn(
+                    "Percentuale",
+                    format="%f",
+                ),
+                energy_prod_col_name: st.column_config.NumberColumn(
+                    "Energia consumata",
+                    format="%d"
+                ),
+            },
+            hide_index=True,
+        )
+    # Inserisco il grafico nel secondo pannello
+    with col2:
+        st.altair_chart(pie_chart, use_container_width=True)
+## Grafico a Barre ############################################################################################
 ## Barchart Production #########################################################################################
-def bar_chart(df_prod_pred_updated, selected_single_state, prod_list_2, year):
+def bar_chart_with_db(df_prod_pred_updated, selected_single_state, prod_list_2, year):
     
     # Trasformo il DataFrame da frequenza mensile a frequenza annuale
     df_prod_pred_A_updated = df_from_M_to_A(df_prod_pred_updated)
@@ -1238,7 +1418,7 @@ def bar_chart(df_prod_pred_updated, selected_single_state, prod_list_2, year):
     bars = alt.Chart(stati_line).mark_bar().encode(
         x=alt.X('state:N').axis(None),
         y=alt.Y('sum(energy_prod):Q').stack('zero').axis(None),
-        color=alt.Color('siec', scale=alt.Scale(scheme='tableau10')),
+        color=alt.Color('siec', scale=alt.Scale(scheme='category10')),
     )
 
     # Creazione del selettore per il punto più vicino
@@ -1319,10 +1499,10 @@ def bar_chart(df_prod_pred_updated, selected_single_state, prod_list_2, year):
         st.altair_chart(bar, use_container_width=True)
 
 ## Barchart consumption ########################################################################################
-def barchart_cons(df_input, df_cons_pred, year, list_consuption, selected_single_state):
+def bar_chart_cons(df_input, df_cons_pred, year, list_consuption, selected_single_state):
 
     # Seleziono solo gli stati che mi interessano
-    selected_multi_state = select_multi_state(df_input, True)
+    selected_multi_state = select_multi_state(df_input, False)
 
     # Faccio la previsione per i vari tipi di consumo di energia
     for state in selected_multi_state:
@@ -1353,8 +1533,8 @@ def barchart_cons(df_input, df_cons_pred, year, list_consuption, selected_single
 
     # Creazione del grafico
     bar = alt.Chart(stati_bar).mark_bar(color="lightgray").encode(
-        x=alt.X('energy_cons_per_capita:Q', sort='ascending'),
-        y=alt.Y('state').axis(None),
+        x=alt.X('energy_cons_per_capita:Q'),
+        y=alt.Y('state:N', sort="-x", axis=None),
     )
 
     # Se il valroe del consumo di energia procapite è maggiore della media europea, coloro la barra di rosso
@@ -1378,11 +1558,13 @@ def barchart_cons(df_input, df_cons_pred, year, list_consuption, selected_single
     # Creo le etichette per i valori e per i nomi degli stati
     text_energy_cons = bar.mark_text(align='left', dx=30).encode(
         text='energy_cons_per_capita:Q',
-        color = "state:N"
+        # color = "state:N"
+        color = alt.Color("state:N", scale=alt.Scale(scheme="tableau10")),
     )
     text_state = bar.mark_text(align='left', dx=12).encode(
         text='state:N',
-        color = "state:N"
+        # color = "state:N"
+        color = alt.Color("state:N", scale=alt.Scale(scheme="tableau10")),
     )
     # Creo il grafico
     layered_chart = alt.layer(bar, text_energy_cons, text_state, highlight, xrule
@@ -1396,51 +1578,17 @@ def barchart_cons(df_input, df_cons_pred, year, list_consuption, selected_single
     faceted_chart 
 
     # Ritorno il DataFrame con i nuovi dati predetti del consumo 
-    return df_input
-    #############################################################################################################
-    
-## Barchart Consumption 2 ######################################################################################
-def barchart_cons_2(df_input, year, selected_single_state):
-
-    # Creazione del DataFrame che verrà utilizzato per il grafico
-    stati_bar_2 = df_input.filter(
-        pl.col("date") == year,
-        pl.col("state") == selected_single_state,
-        pl.col("nrg_bal") != "FC"
-    ).with_columns(
-        # Calcola la percentuale di consumo di energia procapite
-        percentage = ((pl.col("energy_cons_per_capita") / pl.col("energy_cons_per_capita").sum()) * 100).round(2)#.cast(pl.Int32),
-    )
-
-    bar_2 = alt.Chart(stati_bar_2).mark_bar(color="lightgray").encode(
-        x=alt.X('percentage:Q'),
-        y=alt.Y('nrg_bal', sort = 'x', axis = None),
-        # color="nrg_bal:N",
-    )
-    # Grafico di base
-    bar_3 = alt.Chart(stati_bar_2).mark_bar().encode(
-        x=alt.X('percentage:Q'),
-        y=alt.Y('nrg_bal', sort = '-x', axis = None),
-        color="nrg_bal:N",
-    ).properties(
-        width=800, height=400
-    )
-
-    # Grafico contenente il rettangolo grigio
-    rect = bar_2.mark_bar(color="lightgray", opacity=0.4).encode(
-        x2 = alt.X2('percentage_max:Q'),
-        y=alt.Y('nrg_bal', sort = '-x', axis = None),
-    )
-    rect
-    bar_3 + rect
-
-    
+    return df_input    
+  
 ## Barchart Classifica Deficit ################################################################################
 def barchart_classifica(df_input, year):
     # Creazione del DataFrame che verrà utilizzato per il grafico
     df_input = df_input.filter(
         pl.col("date") == year,
         pl.col("def_id") == "TOTAL;FC"
+        # Elimino valori doppioni
+        ).group_by("state").agg(
+            pl.col("deficit").mean().alias("deficit")
         )
     # Creazione del DataFrame per la media di consumo medio di energia in Europa
     df_EU = df_input.filter(pl.col("state") == "EU27_2020"
@@ -1453,7 +1601,7 @@ def barchart_classifica(df_input, year):
 
     # Definizione di var passaggi intermedi
     predicate = alt.datum.deficit > 0
-    color = alt.when(predicate).then(alt.value("#00FF00")).otherwise(alt.value("#D81B60"))
+    color = alt.when(predicate).then(alt.value("#117733")).otherwise(alt.value("#5F021F")) # In alternativa: #00FF00 e #D81B60
     select = alt.selection_point(name="select", on="click")
     highlight = alt.selection_point(name="highlight", on="pointerover", empty=False)
 
@@ -1522,14 +1670,12 @@ def page_deficit():
     quali stati dell'Unione Europea sono in postivo e quali in negativo. 
     Viene anche mostarto il valore medio per l'intera UE.""")
     barchart_classifica(df_comb, year)
+    bump_chart(df_comb)
     
-my_expander = st.expander(label='Filtro')
-
 def page_production():
     st.title("Pagina Produzione")
     
-    with my_expander:
-        selected_siec = select_type(df_prod)
+    selected_siec = select_type(df_prod)
 
     df_prod_pred = pred_siec(selected_siec).filter(pl.col("date") >= pl.datetime(2017, 1, 1))
     df_prod_pred_A = df_from_M_to_A(df_prod_pred).filter(pl.col("date") >= pl.datetime(2017, 1, 1))
@@ -1554,7 +1700,7 @@ def page_production():
     selected_single_state = select_state()
 
     df_prod_pred_updated = area_chart(df_prod_pred, selected_single_state, prod_list)
-    bar_chart(df_prod_pred_updated, selected_single_state, prod_list_2, year)
+    bar_chart_with_db(df_prod_pred_updated, selected_single_state, prod_list_2, year)
 
 def page_consumption():
     st.title("Pagina Consumo")
@@ -1570,13 +1716,14 @@ def page_consumption():
     
     selected_single_state = select_state()
 
-    df_bar_2 = barchart_cons(df_cons_pred_A, df_cons_pred, year, list_consuption, selected_single_state) #DA rimuovere 
-    barchart_cons_2(df_bar_2, year, selected_single_state)
+    df_bar_2 = bar_chart_cons(df_cons_pred_A, df_cons_pred, year, list_consuption, selected_single_state) #DA rimuovere 
     st.write(f"""
     ### Consumo di energia nei vari settori per un singolo stato europeo.
      """)
-    line_chart_with_IC(df_cons_pred, selected_single_state)
-    # barchart_omino(df_cons_pred, year, selected_single_state)
+    df_cons_pred_updated = line_chart_with_IC(df_cons_pred, selected_single_state)
+    # bar_chart_cons_single_state(df_bar_2, year, selected_single_state)
+    pie_chart(df_cons_pred_updated, selected_single_state, year)
+
 
 pg = st.navigation([
     st.Page(page_deficit, title="Deficit/Surplus"),
