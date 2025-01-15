@@ -9,11 +9,11 @@ Il seguente progetto ha lo scopo di analizzare il deficit e il surplus di energi
 #### Opzione 1: Scaricalo come file zip
 1. Clicca sul pulsante verde `<> Code`  posizionato in alto a destra
 
-![[Tutorial1.png|400]]
+![[tutorial1.png|400]]
 
 2. Clicca su `Download ZIP`
 
-![[Tutorial2.png|400]]
+![[tutorial2.png|400]]
 
 3. Scegli la directory in cui salvare il file
 4. Trova il file, unzippalo usando una tua app a piacimento (7-zip, WinRAR, etc..) 
@@ -32,7 +32,7 @@ Il seguente progetto ha lo scopo di analizzare il deficit e il surplus di energi
 1. Apri il tuo IDE di scelta (es. Visual Studio Code)
 2. Clicca su `File` in alto a sinistra
 3. Clicca su `Open Folder...`
-(In alternativa ai passaggi 2. e 3. si può usare la combinazione di comandi `CTRL + K + O`)
+(In alternativa ai passaggi 2. e 3. si può usare la combinazione `CTRL + K + O`)
 4. Seleziona la **cartella** in cui è stato precedentemente scaricato il file
 5. Una volta che tutto si è aperto, digita sul terminale aperto in basso:
 		`uv run streamlit run webapp.py`   
