@@ -9,7 +9,7 @@ Il seguente progetto ha lo scopo di analizzare il deficit e il surplus di energi
 #### Opzione 1: Scaricalo come file zip
 1. Clicca sul pulsante verde `<> Code`  posizionato in alto a destra
 
-![[tutorial1.png|400]]
+![[https://github.com/SteTerro/Progetto/blob/main/tutorial1.png|400]]
 
 2. Clicca su `Download ZIP`
 
