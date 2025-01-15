@@ -172,7 +172,10 @@ def get_data_productivity(url):
             # Seleziono solo un tipo di unità di misura, GWH (Gigawattora)
             pl.col("unit") == "GWH",
             # Filtro solo i tipi di energia che mi interessano, ignoro tutti quelli più specifici (es. Eolico offshore e onshore, Pannello fotovaltaico e solare, ecc.)
-            pl.col("siec").is_in(["TOTAL","X9900","RA000","N9000","CF","CF_R","RA100","RA200","RA300","RA400","RA500_5160","C0000","CF_NR","G3000","O4000XBIO"]),
+            pl.col("siec").is_in(["TOTAL","X9900","RA000","N9000",
+                                  "CF","CF_R","RA100","RA200",
+                                  "RA300","RA400","RA500_5160",
+                                  "C0000","CF_NR","G3000","O4000XBIO"]),
             )
         .drop("freq",
               "unit")
@@ -227,7 +230,8 @@ def get_data_consumption(url):
             # Seleziono solo un tipo di unità di misura, GWH (Gigawattora), elimino valori europei lasciando solo quello dei 27 stati membri
             pl.col("state")!="EA20",
             # Filtro i  tipi di consumi che saranno utilizzati
-            pl.col("nrg_bal").is_in(["FC", "FC_IND_E" , "FC_TRA_E", "FC_OTH_CP_E", "FC_OTH_HH_E", "FC_OTH_AF_E"]),
+            pl.col("nrg_bal").is_in(["FC", "FC_IND_E" , "FC_TRA_E", 
+            "FC_OTH_CP_E", "FC_OTH_HH_E", "FC_OTH_AF_E"]),
         )
         .drop("freq",
               "unit",
@@ -779,7 +783,6 @@ def line_chart_prod(df_input, countries, siec):
         strokeDash="predicted:N"
     )
     df_pp = stati_line.filter(pl.col("predicted") == True)
-    st.write(df_pp)
 
     first_year = df_pp["date"].min()
     last_year = df_pp["date"].max()
@@ -788,7 +791,6 @@ def line_chart_prod(df_input, countries, siec):
         {"start": first_year, "end": last_year},
     ]
     source_date_df = pl.DataFrame(source_date)
-    st.write(source_date_df)
 
     # Dataframe contente inizio e fine del pannello del forecast
     # source_date = [
@@ -1242,7 +1244,6 @@ def bump_chart(df_input):
     ).group_by(["state", "date"]).agg(
         pl.col("deficit").mean().alias("deficit")
     )
-    st.write(df_input)
     # highlight = alt.selection_point(on='pointerover', fields=['state'], nearest=True)
     nearest = alt.selection_point(nearest=True, on="pointerover",
                               fields=["date"], empty=False)
@@ -1254,16 +1255,6 @@ def bump_chart(df_input):
             ).sort("deficit", descending=True).head(5)
         stati_rank = pl.concat([stati_rank, stati_sel])
     # stati_rank = stati_rank.select("state", "date", "deficit", "predicted")
-    st.write(stati_rank)
-
-    # stati_rank_2 = pl.DataFrame()
-    # for time in df_input["date"].unique():
-    #     stati_sel = df_input.filter(
-    #         pl.col("date") == time,
-    #         ).sort("deficit", descending=False).head(5)
-    #     stati_rank_2 = pl.concat([stati_rank_2, stati_sel])
-    # # stati_rank_2 = stati_rank_2.select("state", "date", "deficit")
-    # st.write(stati_rank_2)
 
     # Dataframe contente inizio e fine del pannello del forecast
     source_date = [
@@ -1283,7 +1274,6 @@ def bump_chart(df_input):
         .mark_rule(color="grey", strokeDash=[12, 6], size=2, opacity=0.4)
         .encode(x="start:T")
     )
-
     # Creazione del testo per indicare "Valori Reali" e "Forecast"
     text_left = alt.Chart(source_date_df).mark_text(
         align="left", dx=-55, dy=-105, color="grey"
@@ -1301,7 +1291,8 @@ def bump_chart(df_input):
     ranking_plot = alt.Chart(stati_rank).mark_line(point=True, strokeDash=[4,1]).encode(
         x=alt.X("date").timeUnit("year").title("date"),
         y="rank:O",
-        color=alt.Color("state:N"),
+        color = alt.Color("state:N", scale=alt.Scale(scheme="tableau10")),
+        # strokeDash="predicted:N"
     ).transform_window(
         rank="rank()",
         sort=[alt.SortField("deficit", order="descending")],
