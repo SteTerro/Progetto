@@ -8,31 +8,26 @@ Il seguente progetto ha lo scopo di analizzare il deficit e il surplus di energi
 ### Parte 1: scarica il file
 #### Opzione 1: Scaricalo come file zip
 1. Clicca sul pulsante verde `<> Code`  posizionato in alto a destra
-
-![[Tutorial1.png|400]]
-
+![PTasto <> Code](https://github.com/SteTerro/Progetto/blob/main/tutorial1.png?raw=true|100)
 2. Clicca su `Download ZIP`
-
-![[Tutorial2.png|400]]
-
 3. Scegli la directory in cui salvare il file
 4. Trova il file, unzippalo usando una tua app a piacimento (7-zip, WinRAR, etc..) 
 #### Alternativa: scaricalo da git
 1. Scegli la cartella in cui vuoi scaricare il progetto
 2. Apri il terminale del tuo dispositivo (PowerShell, terminale macOS, terminale Linux, etc...)
 3. Spostati sulla cartella scelta in precedenza
-		- Per Windows: `cd C:\Users\YourUser\\...`
-		- Per Linux\macOS: `cd /Users/YourUser/...`
-	(Con `YourUser` viene indicato il nome utente del pc, e `...` il path di sistema da completare)
-4. Copiare il comando: `git@github.com:SteTerro/Progetto.git`
-5. Trova il file, unzippalo usando una tua app a piacimento (7-zip, WinRAR, etc..) 
+   - Per Windows: `cd C:\Users\YourUser\\...`
+   - Per Linux\macOS: `cd /Users/YourUser/...`
+(Con `YourUser` viene indicato il nome utente del pc, e `...` il path di sistema da completare)
+5. Copiare il comando: `git@github.com:SteTerro/Progetto.git`
+6. Trova il file, unzippalo usando una tua app a piacimento (7-zip, WinRAR, etc..) 
 
 ### Parte 2: esegui il codice
 #### Opzione 1: Da un IDE
 1. Apri il tuo IDE di scelta (es. Visual Studio Code)
 2. Clicca su `File` in alto a sinistra
 3. Clicca su `Open Folder...`
-(In alternativa ai passaggi 2. e 3. si può usare la combinazione di comandi `CTRL + K + O`)
+(In alternativa ai passaggi 2. e 3. si può usare la combinazione `CTRL + K + O`)
 4. Seleziona la **cartella** in cui è stato precedentemente scaricato il file
 5. Una volta che tutto si è aperto, digita sul terminale aperto in basso:
 		`uv run streamlit run webapp.py`   
@@ -41,17 +36,15 @@ Il seguente progetto ha lo scopo di analizzare il deficit e il surplus di energi
 #### Alternativa: esegui dal terminale
 1. Apri il terminale (o ritornaci se è ancora aperto)
 2. Spostati nella cartella del progetto appena scaricato
-		- Per Windows: `cd C:\Users\YourUser\\...`
-		- Per Linux\macOS: `cd /Users/YourUser/...`
+	- Per Windows: `cd C:\Users\YourUser\\...`
+	- Per Linux\macOS: `cd /Users/YourUser/...`
 (Se si è scaricato la repository tramite terminale bisogna comunque spostarsi di nuovo)
 3. Una volta che si è nella cartella giusta, digitare nel terminale: 
 		`uv run streamlit run webapp.py`
 4. Cliccare invio
-
-
-> [!Problemi] 
+ 
 > Se ci sono problemi nell'eseguire l'app verificare ancora una volta che si è nella cartella giusta!
 
 ## Analisi
 ---
-Se si vuole capire meglio come sonos tate svolte le analisi e il perchè dietro alcune scelte è possibile farlo leggendo la [documentazione allegata](obsidian://open?vault=Sistemi&file=Progetto%2FDocumentazione)
+Se si vuole capire meglio come sonos tate svolte le analisi e il perchè dietro alcune scelte è possibile farlo leggendo la [documentazione allegata](https://github.com/SteTerro/Progetto/blob/main/Documentazione.pdf)
