@@ -19,11 +19,11 @@ Il seguente progetto ha lo scopo di analizzare il deficit e il surplus di energi
 1. Scegli la cartella in cui vuoi scaricare il progetto
 2. Apri il terminale del tuo dispositivo (PowerShell, terminale macOS, terminale Linux, etc...)
 3. Spostati sulla cartella scelta in precedenza
-		- Per Windows: `cd C:\Users\YourUser\\...`
-		- Per Linux\macOS: `cd /Users/YourUser/...`
-	(Con `YourUser` viene indicato il nome utente del pc, e `...` il path di sistema da completare)
-4. Copiare il comando: `git@github.com:SteTerro/Progetto.git`
-5. Trova il file, unzippalo usando una tua app a piacimento (7-zip, WinRAR, etc..) 
+   - Per Windows: `cd C:\Users\YourUser\\...`
+   - Per Linux\macOS: `cd /Users/YourUser/...`
+(Con `YourUser` viene indicato il nome utente del pc, e `...` il path di sistema da completare)
+5. Copiare il comando: `git@github.com:SteTerro/Progetto.git`
+6. Trova il file, unzippalo usando una tua app a piacimento (7-zip, WinRAR, etc..) 
 
 ### Parte 2: esegui il codice
 #### Opzione 1: Da un IDE
