@@ -1037,6 +1037,7 @@ dependencies = [
     { name = "sktime" },
     { name = "statsforecast" },
     { name = "streamlit" },
+    { name = "streamlit-pdf-viewer" },
     { name = "vega-datasets" },
 ]
 
@@ -1057,6 +1058,7 @@ requires-dist = [
     { name = "sktime", specifier = ">=0.34.0" },
     { name = "statsforecast", specifier = ">=1.7.8" },
     { name = "streamlit", specifier = ">=1.40.1" },
+    { name = "streamlit-pdf-viewer", specifier = ">=0.0.20" },
     { name = "vega-datasets", specifier = ">=0.9.0" },
 ]
 
@@ -1699,6 +1701,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/80/70/b76a32201b04a5a2a1c667fe7327cb7a3cc25d726d3863ba5863d2b0dccf/streamlit-1.40.1.tar.gz", hash = "sha256:1f2b09f04b6ad366a2c7b4d48104697d1c8bc33f48bdf7ed939cc04c12d3aec6", size = 8266452 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/9a/14/857d0734989f3d26f2f965b2e3f67568ea7a6e8a60cb9c1ed7f774b6d606/streamlit-1.40.1-py2.py3-none-any.whl", hash = "sha256:b9d7a317a0cc88edd7857c7e07dde9cf95647d3ae51cbfa8a3db82fbb8a2990d", size = 8645398 },
+]
+
+[[package]]
+name = "streamlit-pdf-viewer"
+version = "0.0.20"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "streamlit" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/3b/2c/112707c18ddb9012b34aa91cacd7f1a17efee75f175190d702a6081610ab/streamlit_pdf_viewer-0.0.20.tar.gz", hash = "sha256:71b59a0034603195d6461c60d46f1d7803e658b7f2b3daec5fcc687c72de3e00", size = 2368441 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/64/31/2c5f9ea3f0e0d31616569b43560733d608b590985c8b5212892e39a0342c/streamlit_pdf_viewer-0.0.20-py3-none-any.whl", hash = "sha256:3712249a930b6b274289fdf1d7b30b380a760e63a5e1319c75f3f7d76613e27c", size = 2402096 },
 ]
 
 [[package]]

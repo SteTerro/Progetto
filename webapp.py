@@ -5,6 +5,7 @@ import country_converter as cc
 
 from statsforecast import StatsForecast
 from statsforecast.models import AutoARIMA, AutoETS
+from streamlit_pdf_viewer import pdf_viewer
 
 url_consumption = "https://ec.europa.eu/eurostat/api/dissemination/sdmx/2.1/data/nrg_cb_e?format=TSV&compressed=true"
 url_productivity = "https://ec.europa.eu/eurostat/api/dissemination/sdmx/2.1/data/nrg_cb_pem?format=TSV&compressed=true"
@@ -157,6 +158,7 @@ def get_data_productivity(url):
             .str.replace("d", "")
             # Per un problema di lettura del dato, sostituisco i valori nulli con un valore impossibile
             .str.replace(":c", "123456789")
+            .str.replace(":", "123456789")
             .cast(pl.Float64),
             unique_id=pl.col("state")+";"+pl.col("siec"),
             state = pl.col("state")
@@ -172,10 +174,7 @@ def get_data_productivity(url):
             # Seleziono solo un tipo di unità di misura, GWH (Gigawattora)
             pl.col("unit") == "GWH",
             # Filtro solo i tipi di energia che mi interessano, ignoro tutti quelli più specifici (es. Eolico offshore e onshore, Pannello fotovaltaico e solare, ecc.)
-            pl.col("siec").is_in(["TOTAL","X9900","RA000","N9000",
-                                  "CF","CF_R","RA100","RA200",
-                                  "RA300","RA400","RA500_5160",
-                                  "C0000","CF_NR","G3000","O4000XBIO"]),
+            pl.col("siec").is_in(["TOTAL","X9900","RA000","N9000","CF","CF_R","RA100","RA200","RA300","RA400","RA500_5160","C0000","CF_NR","G3000","O4000XBIO"]),
             )
         .drop("freq",
               "unit")
@@ -1715,10 +1714,16 @@ def page_consumption():
     # bar_chart_cons_single_state(df_bar_2, year, selected_single_state)
     pie_chart(df_cons_pred_updated, selected_single_state, year)
 
+# Visualizzo il pdf, purtropopo la libreria è ancora nuova e la visualizzazione non è perfetta, ma è qualcosa
+# Non volevo usare un markdown perchè sennò sarebbero scomparse le immagini.
+def page_doc():
+    # st.title("Documentazione")
+    pdf_viewer("documentazione.pdf")
 
 pg = st.navigation([
     st.Page(page_deficit, title="Deficit/Surplus"),
     st.Page(page_production, title="Produzione"),
     st.Page(page_consumption, title="Consumo"),
+    st.Page(page_doc, title = "Documentazione" )
 ])
 pg.run()
