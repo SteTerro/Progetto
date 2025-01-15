@@ -45,11 +45,9 @@ Il seguente progetto ha lo scopo di analizzare il deficit e il surplus di energi
 3. Una volta che si è nella cartella giusta, digitare nel terminale: 
 		`uv run streamlit run webapp.py`
 4. Cliccare invio
-
-
-> [!Problemi] 
+ 
 > Se ci sono problemi nell'eseguire l'app verificare ancora una volta che si è nella cartella giusta!
 
 ## Analisi
 ---
-Se si vuole capire meglio come sonos tate svolte le analisi e il perchè dietro alcune scelte è possibile farlo leggendo la [documentazione allegata](obsidian://open?vault=Sistemi&file=Progetto%2FDocumentazione)
+Se si vuole capire meglio come sonos tate svolte le analisi e il perchè dietro alcune scelte è possibile farlo leggendo la [documentazione allegata]([https://github.com/SteTerro/Progetto/blob/main/tutorail2.png?raw=true])
