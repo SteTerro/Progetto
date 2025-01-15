@@ -39,8 +39,8 @@ Il seguente progetto ha lo scopo di analizzare il deficit e il surplus di energi
 #### Alternativa: esegui dal terminale
 1. Apri il terminale (o ritornaci se è ancora aperto)
 2. Spostati nella cartella del progetto appena scaricato
-		- Per Windows: `cd C:\Users\YourUser\\...`
-		- Per Linux\macOS: `cd /Users/YourUser/...`
+- Per Windows: `cd C:\Users\YourUser\\...`
+- Per Linux\macOS: `cd /Users/YourUser/...`
 (Se si è scaricato la repository tramite terminale bisogna comunque spostarsi di nuovo)
 3. Una volta che si è nella cartella giusta, digitare nel terminale: 
 		`uv run streamlit run webapp.py`
