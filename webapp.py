@@ -373,9 +373,11 @@ def select_year(df_input):
 
 def get_first_4_countries(df_input, filter):
 
+    # Se non do nessuna nazione in input ritorno le 4 nazioni principale
     if filter is None:
         return top4_EU
 
+    # Sennò filtro per le colonne
     if df_input.columns == df_prod.columns:
         x = "energy_prod"
         type = "siec"
@@ -392,6 +394,7 @@ def get_first_4_countries(df_input, filter):
         x = "deficit"
         type = "def_id"
 
+    # e poi faccio la somma di tutta l'energia prodotta/consumata e ordino
     country_default = df_input.filter(pl.col(type) == filter).group_by("state").agg(
         pl.sum(x).alias("total_energy")
     ).sort("total_energy", descending=True).head(4).select("state").to_series()
@@ -402,7 +405,7 @@ def last_date(df_input, date):
     # Pendo filtro per la data in input
     check =  df_input.filter(pl.col("date") == date, pl.col("predicted") == True)
 
-    # Preparo l'if con i vari casi
+    # Ritona un warning se c'è almeno un valore calcoalto tramite ARIMA
     if len(check) != 0: 
         st.warning("Sono presenti valori simulati!")
 
@@ -662,11 +665,11 @@ pop = pl.concat([pop, pop_pred], how="vertical_relaxed").group_by(["state", "dat
 )
 
 # Lista di variabili utili
-top4_EU = ["DE", "FR", "IT", "ES"]
-list_consuption = ["FC", "FC_IND_E" , "FC_TRA_E", "FC_OTH_CP_E", "FC_OTH_HH_E", "FC_OTH_AF_E"]
-list_productivity = ["TOTAL","X9900","RA000","N9000","CF","CF_R","RA100","RA200","RA300","RA400","RA500_5160","C0000","CF_NR","G3000","O4000XBIO"]
-prod_list_2 = ["X9900","N9000","CF_R","RA100","RA200","RA300","RA400","RA500_5160","C0000","CF_NR","G3000","O4000XBIO"]
-prod_list = ["RA000", "CF", "N9000", "X9900"]
+top4_EU = ["DE", "FR", "IT", "ES"] # Lista degli stati "più importanti"
+list_consuption = ["FC", "FC_IND_E" , "FC_TRA_E", "FC_OTH_CP_E", "FC_OTH_HH_E", "FC_OTH_AF_E"] # Lista di tutti i tipi di consumo
+list_productivity = ["TOTAL","X9900","RA000","N9000","CF","CF_R","RA100","RA200","RA300","RA400","RA500_5160","C0000","CF_NR","G3000","O4000XBIO"] # Lista di tutti i tipi di produzione
+prod_list_2 = ["X9900","N9000","CF_R","RA100","RA200","RA300","RA400","RA500_5160","C0000","CF_NR","G3000","O4000XBIO"] # Lista senza il totale della produzione, il totale delle rinnovabili e il totale del fossile
+prod_list = ["RA000", "CF", "N9000", "X9900"] # Lista con solo le fonti considerate come "macrocategorie"
 
 # Filtri per i DataFrame, seleziono solo i dati relativi all'Unione Europea
 df_prod = EU_filter(df_prod)
@@ -687,7 +690,7 @@ df_A = get_df_A(df_prod_pred_A, df_cons_pred_A)
 ## utils ######################################################################################################
 
 #Funzione che implementa il rettangolo grigio con la rispettiva linea
-# di solito cambia la y e le x rimangono uguali, in ogni caso faccio in modo che volendo posso modificarle tutte e tre 
+# x_left, x_righe e y servono a cambiare la posizione delle scritte
 def rect_and_label(df_input, y, x_left=-55, x_right=5, year_start = None, year_end=None):
     # Filtro il database per pendere solo i valori predetti
     if year_start == None: 
@@ -839,8 +842,8 @@ def line_chart_prod(df_input, countries, siec):
         title = alt.Title("Produzione energetica in Europa", anchor='middle')
     )
     
+    # Implemento le funzioni grafiche di base
     rect, xrule, text_left, text_right = rect_and_label(stati_line, x_left=-55, x_right=5, y = -145)
-
 
     # Creazione del cerchio vicino all'etichetta
     lable_circle = alt.Chart(stati_line.filter(pl.col("predicted")==True)).mark_circle().encode(
@@ -944,6 +947,7 @@ def line_chart_with_IC(df_cons_pred, selected_single_state):
         strokeDash=alt.StrokeDash("predicted:N").legend(None)
     ).interactive()
 
+    # Implemento le funzioni grafiche di base
     rect, xrule, text_left, text_right = rect_and_label(stati_line, x_left=-55, x_right=5, y = -120)
 
     # Creazione del cerchio vicino all'etichetta
@@ -1023,6 +1027,7 @@ def line_chart_deficit(df_input, ):
         strokeDash=alt.StrokeDash("predicted:N").legend(orient="top", title="Valore predetto")
     )
 
+    # Implemento le funzioni grafiche di base
     rect, xrule, text_left, text_right = rect_and_label(stati_line, x_left=-55, x_right=5, y = -145)
 
     # Disegno la linea sullo zero
@@ -1121,6 +1126,7 @@ def area_chart(df_prod_pred, df_prod_pred_total, selected_single_state, prod_lis
             )),
     )
     
+    # Implemento le funzioni grafiche di base
     rect, xrule, text_left, text_right = rect_and_label(stati_area, x_left=-55, x_right=5, y = -145)
 
     # Creazione del cerchio vicino all'etichetta
@@ -1199,20 +1205,21 @@ def bump_chart(df_input):
             pl.col("date") == time,
             ).sort("deficit", descending=True).head(5)
         stati_rank = pl.concat([stati_rank, stati_sel])
-    # stati_rank = stati_rank.select("state", "date", "deficit", "predicted")
-
+    
+    # Implemento le funzioni grafiche di base
     rect, xrule, text_left, text_right = rect_and_label(stati_rank, x_left=-55, x_right=5, y = -135, year_start="2023")
 
+    # Grafico di base
     ranking_plot = alt.Chart(stati_rank).mark_line(point=True, strokeDash=[4,1]).encode(
         x=alt.X("date", title=None).timeUnit("year"),
         y=alt.Y("rank:O", title="Classifica"),
         color = alt.Color("state:N", scale=alt.Scale(scheme="tableau10")).legend(orient="top"),
-        # strokeDash="predicted:N"
     ).transform_window(
         rank="rank()",
         sort=[alt.SortField("deficit", order="descending")],
         groupby=["date"])
 
+    # Selettore verticale
     selectors = alt.Chart(df_input).mark_point().encode(
         x="date:T",
         opacity=alt.value(0),
@@ -1221,23 +1228,25 @@ def bump_chart(df_input):
     )
     when_near = alt.when(nearest)
 
-    # Draw points on the line, and highlight based on selection
+    # Disegna i punti sulla linea
     points = ranking_plot.mark_point().encode(
         opacity=when_near.then(alt.value(1)).otherwise(alt.value(0))
     )
 
-    # Draw text labels near the points, and highlight based on selection
+    # Disegna le label vicino ai punti
     text = ranking_plot.mark_text(align="left", dx=5, dy=-7, fontSize=14).encode(
         text=when_near.then("state:N").otherwise(alt.value(" "))
     )
 
-    # Draw a rule at the location of the selection
+    # Selettore verticale
+    # Dovrebbe fare la stessa cosa di rules, ma per adesso non lo tocco
     rules = alt.Chart(df_input).mark_rule(color="gray").encode(
         x="date:T",
     ).transform_filter(
         nearest
     )   
 
+    # Unione dei vari layer
     classifica = alt.layer(
         rect, xrule, ranking_plot, selectors, points, rules, text, text_left, text_right
     ).properties(
@@ -1257,6 +1266,7 @@ def pie_chart(df_input, selected_single_state, year):
     ).with_columns(
         # Calcola la percentuale di consumo di energia per ogni tipo di bilancio energetico
         percentage = ((pl.col("energy_cons") / pl.col("energy_cons").sum()) * 100).round(2),
+        # Rinomino nrg_bal con etichette più comprensibili
         settore = pl.col("nrg_bal")
         .str.replace("FC_IND_E","Industria")
         .str.replace("FC_TRA_E","Trasporti")
@@ -1269,17 +1279,17 @@ def pie_chart(df_input, selected_single_state, year):
         theta = alt.Theta("percentage:Q").stack(True),
         color = alt.Color("nrg_bal:N", scale=alt.Scale(scheme="category10"), legend=None),
     )
-    # Creo il foro del donut chart
+    # Creo il "foro" del donut chart
     pie = base.mark_arc(outerRadius=120, innerRadius=50)
     # Aggiungo il testo per la percentuale
     text_percentage = base.mark_text(radius=140, size=15).encode(text=("percentage:Q"))
 
+    # Creo il grafico finale
     pie_chart = alt.layer(
         pie + text_percentage 
     ).properties(
         width=600, height=600
     )
-
 
     # Preparo la visualizzazione su due colonne
     # Preparo i nomi delle colonne
@@ -1615,8 +1625,7 @@ def barchart_classifica(df_input, year):
 
 ## Implementazione Pagine ######################################################################################
 
-#Rect deve avere come X date a partire dal databse filtrato
-
+# Definisco le tre pagine
 def page_deficit():
     st.title("Evoluzione del Deficit/Surplus di energia elettrica in Europa")
     st.write(f"""    
@@ -1808,7 +1817,7 @@ def page_consumption():
     selected_nrg_bal = "FC"
     pie_chart(df_cons_pred_updated, selected_single_state, year)
 
-# Visualizzo il pdf, purtropopo la libreria è ancora nuova e la visualizzazione non è perfetta, ma è qualcosa
+# Visualizzo il pdf, purtroppo la libreria è ancora nuova e la visualizzazione non è perfetta, ma almeno è qualcosa
 # Non volevo usare un markdown perchè sennò sarebbero scomparse le immagini.
 def page_doc():
     # st.title("Documentazione")
