@@ -1395,29 +1395,29 @@ def bar_chart_cons(df_input, df_cons_pred, year, list_consuption):
 
     # Seleziono solo gli stati che mi interessano
     selected_multi_state = select_multi_state(df_input, filter=None, EU=False)
-    st.write(selected_multi_state)
+
     # Faccio la previsione per i vari tipi di consumo di energia
     for state in selected_multi_state:
         for consuption in list_consuption:
             df_cons_pred = pl.concat([df_cons_pred, pred_cons(consuption, state)], how="vertical_relaxed")
     # Trasformo il DataFrame da frequenza mensile a frequenza annuale e faccio il cast ad intero della colonna consumo di energia
+    for consuption in list_consuption:
+        df_cons_pred = pl.concat([df_cons_pred, pred_cons(consuption, "EU27_2020")], how="vertical_relaxed")
     df_input = df_from_M_to_A(df_cons_pred)
     df_input = cast_int_cons(df_input)
-    st.write(df_input)
     # Facendo il join con la popolazione, posso calcolare il consumo di energia procapite
     df_input = df_input.join(pop, on = ["state", "date"], how = "inner"
     ).with_columns(
         energy_cons_per_capita = (pl.col("energy_cons") / pl.col("population")).round(5),
     )
-    st.write(df_input)
     # Creazione del DataFrame che verrà utilizzato per il grafico
     stati_bar = df_input.filter(
         pl.col("state").is_in(selected_multi_state),
         pl.col("date") == year,
         pl.col("nrg_bal") != "FC"
         )
-    st.write(stati_bar)
     # Creazione del DataFrame per la media di consumo di energia in Europa
+
     EU_mean = df_input.filter(pl.col("state") == "EU27_2020", pl.col("date") == year).rename({"energy_cons_per_capita": "europe_mean"}).drop("state", "energy_cons", "population", "predicted", "unique_id")#.item()
 
     # Join tra i due DataFrame
@@ -1455,7 +1455,7 @@ def bar_chart_cons(df_input, df_cons_pred, year, list_consuption):
     text_state = bar.mark_text(align='left', dx=12, fontSize=14).encode(
         text='state:N',
         # color = "state:N"
-        color = alt.Color("state:N", scale=alt.Scale(scheme="tableau10")),
+        color = alt.Color("state:N", scale=alt.Scale(scheme="tableau10")).legend(orient="top"),
     )
     # Creo il grafico
     layered_chart = alt.layer(bar, text_energy_cons, text_state, highlight, xrule_EU
@@ -1720,13 +1720,6 @@ def page_consumption():
              
              """)
     pie_chart(df_cons_pred_updated, selected_single_state, year)
-
-    # st.write(f"""
-    # ### Consumo di energia nei vari settori per un singolo stato europeo.
-    #  """)
-    # df_cons_pred_updated = line_chart_with_IC(df_cons_pred, selected_single_state)
-    # bar_chart_cons(, year, selected_single_state)
-    # pie_chart(df_cons_pred_updated, selected_single_state, year)
 
 # Visualizzo il pdf, purtropopo la libreria è ancora nuova e la visualizzazione non è perfetta, ma è qualcosa
 # Non volevo usare un markdown perchè sennò sarebbero scomparse le immagini.
