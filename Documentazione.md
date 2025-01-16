@@ -1,7 +1,7 @@
 # Documentazione
 ---
 In questo file verranno tratta alcuni aspetti del progetto. Questi aspetti variano dalla descrizione dei dataframe analizzati, a come si sono svolte le analisi statistiche e i loro risultati ad, infine, quali scelte sono state fatte per rappresentare al meglio i dati nei grafici. Il testo è scritto in modo molto informale e non vuole svolgere il compito di una relazione, ma bensì di semplice spiegazione del flusso di idee. Avviso inoltre che non avrò il tempo di revisionare il testo, e nella parte dedicata ai grafici le citazioni alle figure e ai paragrafi potrebbe essere un po' "inconsistenti".
-Il file è disponibile sia in formato pdf che in formato .md.
+Il file è disponibile sia in formato *.pdf* che nel suo formato originale *.md* .
 ## 1. Dataframe Analizzati
 ---
 Nel progetto sono stati analizzati 2 dataframe: uno contenente i dati mensili riguardanti la produzione netta di energia elettrica per tipo di fonte energetica degli stati membri dell'UE (e anche di stati non membri ma comunque affiliati in qualche modo all'unione), l'altro contente i dati annuali sul consumo di energia elettrica nell'UE.
@@ -209,7 +209,10 @@ def get_data_consumption(url):
     return data
 ```
 *Codice 2.* Funzione `get_data_consumption` del programma `webapp.py`
-
+### 1.3 Altri Dataframe
+URL popolazione: https://ec.europa.eu/eurostat/databrowser/view/demo_gind/default/table?lang=en&category=demo.demo_ind
+URL previsioni pop: https://ec.europa.eu/eurostat/databrowser/product/view/proj_stp24?category=proj.proj_23n
+In aggiunta ai due dataframe originali ne sono stati scaricati altre due. Questi due dataframe non sono importanti di per se per il progetto, ma bensì sono stati usati nella sezione del consumo per il calcolo del consumo pro-capite. Per non appesantire ancora la applicazione, aggiungendo un altro ARIMA per la popolazione, è stato deciso di usare le stime fornite da Eurostat.
 ## 2. Funzione Arima
 ---
 Per conseguire l'obbiettivo di studiare il deficit/surplus energetico anche per date future, è stato necessario implementare un modello per l'analisi di serie storiche. Vari modelli sono stati provati (principalmente quelli legati alla libraria sktime) come ad esempio: il lisciamento esponenziale, il BATS ( Exponential Smoothing+ Box-Cox Transformation + ARMA model for residuals) e TBATS (BATS + Trigonometric Seasonal), Facebook Prophet e ARIMA. Tra tutti questi modelli proprio questo ultimo è risultato il migliore, sia in termini di accuratezza  che di facilità di implementazione.
@@ -351,10 +354,10 @@ Codice 4. Operazione di upscaling implementata in `Arima_cons`
 ---
 Dopo aver spiegato come si sono volte le analisi, non resta che spiegare come è stato composto il dataframe Deficit. Innanzitutto, a differenza dei due precedenti dataframe analizzati, defiit/surplus non è stato scaricato, ma invece è il prodotto dei due dataframe sulla produzione e sul consumo dei dati. La prima operazione è stata trasformare il dataframe sulla produzione da una frequenza mensile ad una annuale. Successivamente è stato eseguito il join tra i due dataframe ottenendo così un dataframe unico. Per poi infine fare la differenza tra il consumo totale di energia elettrica e la produzione totale di energia elettrica per ogni stato dell'unione europea. L'alternativa era rappresentata dal fare la differenza prima del forecast e poi fare le previsioni sul dataset ottemtuo. Il problema era rappresentato dal fatto che questa opzione si portava indietro lo stesso probleema del dataframe consumo, ovvero la mancanza di tanti dati. Dopo aver constatato questo, si ha optato per l'opzione attuale, ovvero fare la differenza in un momento successivo al forecast dei due dataframe. 
 
-![[using deficit calcolato prima delle predizioni.png]]
+![[using deficit calcolato prima delle predizioni.png|300]]
 *Figura 9.* Grafico ottenuto dalla differenza tra il dataframe consumo e produzione e successivo forecast sul nuovo dataframe. Si osserva come già al primo dato l'ARIMA ha raggiunto la media.
 
-![[facendo le predizioni e calcolando il deficit.png|400]]
+![[facendo le predizioni e calcolando il deficit.png|300]]
 *Figura 10.* Grafico ottenuto dalla differenza tra il dataframe consumo e produzione dopo aver ottenuto le previsioni dei singoli database. Si può notare come a differenza della figura precedente questa dimostri un andamento più regolare (ignorando l'anno 2022, anno particolare per l'energia in europa a seguito dell'inizio del conflitto russo-ucraino, in cui si osserva un picco vertigonoso del surplus di energia per tutti gli stati europei) 
 ## 4. Grafici
 ---
