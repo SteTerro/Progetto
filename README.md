@@ -47,4 +47,4 @@ Il seguente progetto ha lo scopo di analizzare il deficit e il surplus di energi
 
 ## Analisi
 ---
-Se si vuole capire meglio come sonos tate svolte le analisi e il perchè dietro alcune scelte è possibile farlo leggendo la [documentazione allegata](https://github.com/SteTerro/Progetto/blob/main/Documentazione.pdf)
+Se si vuole capire meglio come sono state svolte le analisi e il perchè dietro alcune scelte è possibile farlo leggendo la [documentazione allegata](https://github.com/SteTerro/Progetto/blob/main/Documentazione.pdf)
