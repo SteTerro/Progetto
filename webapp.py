@@ -320,25 +320,38 @@ def cast_int_cons(df_input):
 
 ## Utils: Selezionatori ######################################################################################################
 # Funzione che permette di selezionare uno stato
-def select_state():
+def select_state(df_input):
+    lista_lunga = cc.convert(names=df_input["state"].unique(), to="short_name")
+    if "not found" in lista_lunga:
+        lista_lunga.append("EU27_2020")
+        lista_lunga.remove("not found")
+    lista_lunga.sort()
     state = st.selectbox(
         "Seleziona uno stato",
-        df_prod["state"].unique().sort(),
-        index = 9
+        lista_lunga,
+        index = 7
     )
-    return state
+    if state == "EU27_2020":
+        return "EU27_2020", "Unione Europea"
+    else:
+        state_iso = cc.convert(names=state, to="ISo2")
+        return state_iso, state
 
 # Funzione che permette di selezionare uno o più stati
 # Possibile anche filtrare la presenza o meno del dato su tutta l'unione europea, default è False, ovvero non presente
 def select_multi_state(df_input, filter = None, EU = False):
     if EU == False:
         df_input = df_input.filter(pl.col("state") != "EU27_2020")
+        lista_lunga = cc.convert(names=df_input["state"].unique(), to="short_name")
+        lista_lunga.sort()
 
     selected_multi_state = st.multiselect(
         "Seleziona uno o più stati",
-        df_input.select("state").unique().sort("state"),
-        default=get_first_4_countries(df_input, filter=filter)
+        lista_lunga,
+        default=get_first_4_countries(df_input, filter=filter),
+        placeholder="Nessuna Opzione Selezionata"
     )
+    selected_multi_state = cc.convert(names=selected_multi_state, to="ISO2")
     return selected_multi_state
 
 # Funzione che permette di selezionare un tipo di energia o un tipo di consumo di energia
@@ -398,7 +411,8 @@ def get_first_4_countries(df_input, filter):
     country_default = df_input.filter(pl.col(type) == filter).group_by("state").agg(
         pl.sum(x).alias("total_energy")
     ).sort("total_energy", descending=True).head(4).select("state").to_series()
-    return country_default
+    country_default = cc.convert(names=country_default, to="short_name")
+    return country_default 
 
 # Funzione che ritorna se sono presenti valori simulati
 def last_date(df_input, date):
@@ -665,7 +679,7 @@ pop = pl.concat([pop, pop_pred], how="vertical_relaxed").group_by(["state", "dat
 )
 
 # Lista di variabili utili
-top4_EU = ["DE", "FR", "IT", "ES"] # Lista degli stati "più importanti"
+top4_EU = ["Germany", "France", "Italy", "Spain"] # Lista degli stati "più importanti"
 list_consuption = ["FC", "FC_IND_E" , "FC_TRA_E", "FC_OTH_CP_E", "FC_OTH_HH_E", "FC_OTH_AF_E"] # Lista di tutti i tipi di consumo
 list_productivity = ["TOTAL","X9900","RA000","N9000","CF","CF_R","RA100","RA200","RA300","RA400","RA500_5160","C0000","CF_NR","G3000","O4000XBIO"] # Lista di tutti i tipi di produzione
 prod_list_2 = ["X9900","N9000","CF_R","RA100","RA200","RA300","RA400","RA500_5160","C0000","CF_NR","G3000","O4000XBIO"] # Lista senza il totale della produzione, il totale delle rinnovabili e il totale del fossile
@@ -823,7 +837,11 @@ def mappa(df_input, year, selected_bal):
 ## Line Chart #################################################################################################
 ## Line Chart con Doppio Asse Y ###############################################################################
 def line_chart_prod(df_input, countries, siec):
-
+    
+    # Se countries contiene un solo valore veniva letto come stringa e questo mi dava problemi ad eseguire il codice 
+    # Verifico che se countries è stringa e poi faccio lo converto a lista
+    if isinstance(countries, str):
+        countries = [countries]
     # Creazione del DataFrame che verrà utilizzato per il grafico
     stati_line = df_input.filter(
         pl.col("state").is_in(countries)).filter(
@@ -838,10 +856,8 @@ def line_chart_prod(df_input, countries, siec):
         color = alt.Color("state:N", scale=alt.Scale(scheme="tableau10")).legend(None),
         # color="state",
         strokeDash=alt.StrokeDash("predicted:N").legend(None)
-    ).properties(
-        title = alt.Title("Produzione energetica in Europa", anchor='middle')
     )
-    
+        
     # Implemento le funzioni grafiche di base
     rect, xrule, text_left, text_right = rect_and_label(stati_line, x_left=-55, x_right=5, y = -145)
 
@@ -1011,7 +1027,8 @@ def line_chart_with_IC(df_cons_pred, selected_single_state):
 def line_chart_deficit(df_input, ):
     # Seleziono solo gli stati che mi interessano
     selected_multi_state = select_multi_state(df_input, filter="TOTAL;FC", EU=False)
-    
+    if isinstance(selected_multi_state, str):
+        selected_multi_state = [selected_multi_state]
     # Creazione del DataFrame che verrà utilizzato per il grafico
     stati_line = df_input.filter(
         pl.col("state").is_in(selected_multi_state),
@@ -1388,12 +1405,8 @@ def bar_chart_with_db(df_prod_pred_updated, df_prod_pred_total, selected_single_
     # st.write(f"Total production: {total_prod}")
     # st.write(f"Total production original: {total_prod_og}")
 
-    # Se la differenza tra la produzione totale e la produzione totale originale è maggiore o minore del 0.05% (soglia scelta arbitrariamente da me) mandiamo un messaggio di warning
-    if total_prod > (total_prod_og + 0.05*total_prod_og):
-        extra_percentage = ((total_prod - total_prod_og) / total_prod_og) * 100
-        st.write(f"Ops! Qualcosa è andato storto! Percentuale di dati extra rispetto a quelli attesi: {extra_percentage:.2f}%")
-        st.warning("Ops! Qualcosa è andato storto, ")
-    elif total_prod < (total_prod_og - 0.05*total_prod_og):
+    # Se la differenza tra la produzione totale e la produzione totale originale è minore del 0.05% (soglia scelta arbitrariamente da me) mandiamo un messaggio di warning
+    if total_prod < (total_prod_og - 0.05*total_prod_og):
         missing_percentage = ((total_prod_og - total_prod) / total_prod_og) * 100
         st.warning(f"Presenti dati mancanti! Percentuale dei dati mancanti: {missing_percentage:.2f}%")
 
@@ -1458,7 +1471,9 @@ def bar_chart_cons(df_input, df_cons_pred, year, list_consuption):
 
     # Seleziono solo gli stati che mi interessano
     selected_multi_state = select_multi_state(df_input, filter=None, EU=False)
-
+    # Come fatto nell'area_chart verifico anche qui che il dato non sia una stringa
+    if isinstance(selected_multi_state, str):
+        selected_multi_state = [selected_multi_state]
     # Faccio la previsione per i vari tipi di consumo di energia
     for state in selected_multi_state:
         for consuption in list_consuption:
@@ -1720,9 +1735,9 @@ def page_production():
              e quanto ogni singola fonte inficia nel totale della produzione di uno stato.    
     """)
     st.divider()
-    selected_single_state = select_state()
+    selected_single_state, state_name = select_state(df_prod)
     st.divider()
-    st.write(f"""### Evoluzione della produzione di energia elettrica in {selected_single_state}""")
+    st.write(f"""### Evoluzione della produzione di energia elettrica in {state_name}""")
     st.write(f"""Ora possiamo osservare come è variata, e come si preveda che vari, la produzione di energia elettrica in un singolo stato europeo.
              Per permettere una più facile lettura dei dati il grafico mostra solo le macrocategorie di fonti energetiche (rinnovabili, non rinnovabili, nucleare e altro). Inoltre è implementato un tooltip (attivabile con il passaggio del mouse sul grafico) che permette la lettura immediata della quantità di energia prodotta misurata in GWH.
     """)
@@ -1735,7 +1750,7 @@ def page_production():
              Infine, si può osservare come un paese dell'est Europa come la Polonia, fortemente dipendente dal carbone, stia piano piano cambiando il proprio modo di produrre energia, aumentando la sua quota di energia prodotta da fonti rinnovabili.    
     """)
 
-    st.write(f"""### Analisi della produzione di energia elettrica in {selected_single_state} nell'anno {year_int}""")
+    st.write(f"""### Analisi della produzione di energia elettrica in {state_name} nell'anno {year_int}""")
     st.write(f"""Ora possiamo osservare come è variata, e come si prevede che vari, la produzione di energia elettrica in un singolo stato europeo.
              Per permettere una più facile lettura dei dati il grafico mostra solo le macrocategorie di fonti energetiche (rinnovabili, non rinnovabili, nucleare e altro). Inoltre è implementato un tooltip (attivabile con il passaggio del mouse sul grafico) che permette la lettura immediata della quantità di energia prodotta misurata in GWH.
     """)
@@ -1793,10 +1808,10 @@ def page_consumption():
              quanto una nazione consuma in ogni settore e in che percentuale si divide il consumo in ogni settore rispetto al consumo totale.    
     """)
     st.divider()
-    selected_single_state = select_state()
+    selected_single_state, state_name = select_state(df_cons)
     st.divider()
 
-    st.write(f"""### Evoluzione del consumo di energia elettrica in {selected_single_state}""")
+    st.write(f"""### Evoluzione del consumo di energia elettrica in {state_name}""")
     st.write(f"""Ora possiamo osservare l'andamento passato e futuro del consumo di energia elettrica in un singolo stato europeo.
             Il consumo è stato diviso nelle 5 categorie in analisi e, per comprendere meglio l'incertezza che ci può essere dietro all'analisi, 
              sono stati aggiunti gli intervalli di confidenza per ogni previsione sul consumo. 
@@ -1809,7 +1824,7 @@ def page_consumption():
              l'UE una unione di paesi "avanzati", la maggior parte del consumo è divisa nel settore secondario e terziario come servizi, industria, commercio, ecc..., 
              mentre altri settori come quello agricolo sono molto ridotti anche in paesi che comunque mantengono un forte settore (come Francia e Italia).
               """)
-    st.write(f"""### Distribuzione del consumo energetico pro-capite in {selected_single_state} nell'anno {year_int}.""")
+    st.write(f"""### Distribuzione del consumo energetico pro-capite in {state_name} nell'anno {year_int}.""")
     st.write(f"""
         Infine viene valutata la fetta che ogni settore di consumo mostrato nel grafico sovrastante occupa sul consumo totale. 
         Per fare ciò è stato implementato il seguente grafico a torta corredato da una tabella con la produzione assoluta e la percentuale che rappresenta sul totale.
