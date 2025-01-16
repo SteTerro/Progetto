@@ -370,7 +370,7 @@ def select_year(df_input):
     return year, year_datetime
 
 # Funzione che permette di ritornare una lista formata dai 5 maggiori stati in base al filtro
-# Al momento non in uso
+
 def get_first_4_countries(df_input, filter):
 
     if filter is None:
@@ -397,10 +397,14 @@ def get_first_4_countries(df_input, filter):
     ).sort("total_energy", descending=True).head(4).select("state").to_series()
     return country_default
 
-# Funzione che ritorna l'ultima data presente nel DataFrame
-def last_date(df_input, state):
-    last_date = df_input.filter(pl.col("state")==state).agg(pl.col("date").max().alias("last_date"))
-    return last_date
+# Funzione che ritorna se sono presenti valori simulati
+def last_date(df_input, date):
+    # Pendo filtro per la data in input
+    check =  df_input.filter(pl.col("date") == date, pl.col("predicted") == True)
+
+    # Preparo l'if con i vari casi
+    if len(check) != 0: 
+        st.warning("Sono presenti valori simulati!")
 
 ## Predizione ##################################################################################################
 # Funzione che permette di fare la predizione della produzione di energia
@@ -929,10 +933,14 @@ def line_chart_with_IC(df_cons_pred, selected_single_state):
 
     # Grafico di base
     line = alt.Chart(stati_line).mark_line(interpolate="basis").encode(
-        x=alt.X("date", title = "Anno"),
+        x=alt.X("date", title = None),
         y=alt.Y("energy_cons:Q"),
         # color="nrg_bal:N",
-        color = alt.Color("nrg_bal:N", scale=alt.Scale(scheme="category10")).legend(orient="top"),
+        color = alt.Color("nrg_bal:N", scale=alt.Scale(scheme="category10"), legend=alt.Legend(
+            title="Settori di consumo:",
+            orient = "top",
+            labelExpr="{'FC_IND_E': 'Industriale', 'FC_TRA_E': 'Trasorti', 'FC_OTH_CP_E': 'Commercio e Servizi', 'FC_OTH_HH_E': 'Familiare', 'FC_OTH_AF_E': 'Agricolo e Forestale'}[datum.label] || datum.label"
+        )),
         strokeDash=alt.StrokeDash("predicted:N").legend(None)
     ).interactive()
 
@@ -1105,11 +1113,15 @@ def area_chart(df_prod_pred, df_prod_pred_total, selected_single_state, prod_lis
         ).encode(
             x="date:T",
             y=alt.Y("energy_prod:Q").stack(True),
-            color=alt.Color("siec:N", scale = color_palette, title="Tipi di Fonti").legend(orient="top"),
-            #color = "siec:N",
+            color=alt.Color("siec:N", scale=color_palette, title="Tipi di Fonti", legend=alt.Legend(
+                orient="bottom",
+                columns = 2,
+                # Uso il metodo labelExpr per rinominare tutte le label della legenda
+                labelExpr="{'RA000': 'RA000 Energia Rinnovabili', 'CF': 'CF Carburanti Fossili', 'N9000': 'N9000 Nucleare', 'X9900': 'X9900 Altre Rinnovabili'}[datum.label] || datum.label"
+            )),
     )
     
-    rect, xrule, text_left, text_right = rect_and_label(stati_area, x_left=-55, x_right=5, y = -155)
+    rect, xrule, text_left, text_right = rect_and_label(stati_area, x_left=-55, x_right=5, y = -145)
 
     # Creazione del cerchio vicino all'etichetta
     lable_circle = alt.Chart(stati_area.filter(pl.col("predicted")==True)).mark_circle().encode(
@@ -1239,12 +1251,19 @@ def pie_chart(df_input, selected_single_state, year):
     stati_pie = df_input.filter(
         pl.col("date") == year,
         pl.col("state") == selected_single_state,
-        pl.col("nrg_bal") != "FC"
+        pl.col("nrg_bal") != "FC",
+    ).group_by("nrg_bal", "state").agg(
+            pl.col("energy_cons").mean().alias("energy_cons")
     ).with_columns(
         # Calcola la percentuale di consumo di energia per ogni tipo di bilancio energetico
-        percentage = ((pl.col("energy_cons") / pl.col("energy_cons").sum()) * 100).round(2)#.cast(pl.Int32),
+        percentage = ((pl.col("energy_cons") / pl.col("energy_cons").sum()) * 100).round(2),
+        settore = pl.col("nrg_bal")
+        .str.replace("FC_IND_E","Industria")
+        .str.replace("FC_TRA_E","Trasporti")
+        .str.replace("FC_OTH_CP_E","Servizi")
+        .str.replace("FC_OTH_HH_E","Familiare")
+        .str.replace("FC_OTH_AF_E","Agricolo")
     )
-
     # Creazione del grafico di base
     base = alt.Chart(stati_pie).mark_arc().encode(
         theta = alt.Theta("percentage:Q").stack(True),
@@ -1261,20 +1280,25 @@ def pie_chart(df_input, selected_single_state, year):
         width=600, height=600
     )
 
+
     # Preparo la visualizzazione su due colonne
     # Preparo i nomi delle colonne
     percentage_col_name = "percentage_" + selected_single_state
     energy_prod_col_name = "energy_cons_" + selected_single_state
+    label_name = "settore_" + selected_single_state
     # Scelgo il layout a due colonne
     col1, col2 = st.columns(2)
     # Inserisco i dati nel primo pannello
     with col1:
         st.dataframe(
-            stati_pie.sort("nrg_bal").pivot(values=["percentage", "energy_cons"], columns="state", index="nrg_bal"),
+            stati_pie.sort("nrg_bal").pivot(values=["settore","percentage", "energy_cons"], columns="state", index="nrg_bal"),
             column_config={
+                label_name: st.column_config.TextColumn(
+                    "Settore di consumo",
+                ),
                 "nrg_bal": st.column_config.TextColumn(
-                    "Fonte",
-                    help="Fonte di energia"
+                    "Codice",
+                    help="Codice identificativo dello settore di consumo"
                 ),
                 percentage_col_name: st.column_config.NumberColumn(
                     "Percentuale",
@@ -1290,6 +1314,7 @@ def pie_chart(df_input, selected_single_state, year):
     # Inserisco il grafico nel secondo pannello
     with col2:
         st.altair_chart(pie_chart, use_container_width=True)
+
 ## Grafico a Barre ############################################################################################
 ## Barchart Production #########################################################################################
 def bar_chart_with_db(df_prod_pred_updated, df_prod_pred_total, selected_single_state, prod_list_2, year):
@@ -1298,20 +1323,22 @@ def bar_chart_with_db(df_prod_pred_updated, df_prod_pred_total, selected_single_
     df_prod_pred_A_updated = df_from_M_to_A(df_prod_pred_updated)
     
     # Creazione del DataFrame che verrà utilizzato per il grafico
-    stati_line = df_prod_pred_A_updated.filter(
+    stati_bar = df_prod_pred_A_updated.filter(
         pl.col("state") == selected_single_state,
         pl.col("siec").is_in(prod_list_2),
         pl.col("date") == year
+    ).group_by("siec", "state").agg(
+            pl.col("energy_prod").mean().alias("energy_prod")
     ).with_columns(
         # Calcola la percentuale di produzione di energia
         percentage= ((pl.col("energy_prod") / pl.col("energy_prod").sum()) * 100).round(3),   
     )
 
     # Creazione del grafico di base
-    bars = alt.Chart(stati_line).mark_bar().encode(
+    bars = alt.Chart(stati_bar).mark_bar().encode(
         x=alt.X('state:N').axis(None),
         y=alt.Y('sum(energy_prod):Q').stack('zero').axis(None),
-        color=alt.Color('siec', scale=alt.Scale(scheme='category10'), title="Tipi di fonte"),
+        color=alt.Color('siec', scale=alt.Scale(scheme='category10'), legend=None),
     )
 
     # Creazione del selettore per il punto più vicino
@@ -1346,7 +1373,7 @@ def bar_chart_with_db(df_prod_pred_updated, df_prod_pred_total, selected_single_
     # Calcola la percentuale totale
     # total_percentage = stati_line["percentage"].sum()
     # Calcola la produzione totale
-    total_prod = stati_line["energy_prod"].sum()
+    total_prod = stati_bar["energy_prod"].sum()
     # st.write(f"Total percentage: {total_percentage}%")
     # st.write(f"Total production: {total_prod}")
     # st.write(f"Total production original: {total_prod_og}")
@@ -1360,20 +1387,45 @@ def bar_chart_with_db(df_prod_pred_updated, df_prod_pred_total, selected_single_
         missing_percentage = ((total_prod_og - total_prod) / total_prod_og) * 100
         st.warning(f"Presenti dati mancanti! Percentuale dei dati mancanti: {missing_percentage:.2f}%")
 
+    # Creo una nuova colonna e rinomino le colonne così da poter capire più facilmente di quale fonte di energia si tratta
+    stati_label = stati_bar.with_columns(
+        Fonte = pl.col("siec")
+        .str.replace("TOTAL","Totale")
+        .str.replace("X9900","Altri combustibili")
+        .str.replace("RA000","Rinnovabili")
+        .str.replace("N9000","Nucleare")
+        .str.replace("CF","Carburante Fossile")
+        .str.replace("CF_R","Fossile Rinnovabile")
+        .str.replace("RA100","Idroelettrico")
+        .str.replace("RA200","Geotermico")
+        .str.replace("RA300","Eolico")
+        .str.replace("RA400","Solare")
+        .str.replace("RA500_5160","Altre Rinnovabili")
+        .str.replace("C0000","Carbone")
+        .str.replace("CF_NR","Fossile non Rinnovabile")
+        .str.replace("G3000","Gas Naturale")
+        .str.replace("O4000XBIO","Petrolio e Derivati"),
+    )
+
     # Preparo la visualizzazione su due colonne
     # Preparo i nomi delle colonne
     percentage_col_name = "percentage_" + selected_single_state
     energy_prod_col_name = "energy_prod_" + selected_single_state
+    fonte_col_name = "Fonte_" + selected_single_state
     # Scelgo il layout a due colonne
-    col1, col2 = st.columns(2)
+    col1, col2 = st.columns([0.7, 0.3])
     # Inserisco i dati nel primo pannello
     with col1:
         st.dataframe(
-            stati_line.sort("siec").pivot(values=["percentage", "energy_prod"], on="state", index="siec"),
+            stati_label.sort("siec").pivot(values=["Fonte","percentage", "energy_prod"], on="state", index="siec"),
             column_config={
                 "siec": st.column_config.TextColumn(
+                    "Siec",
+                    help="Standard International Energy Product Classification"
+                ),
+                fonte_col_name: st.column_config.TextColumn(
                     "Fonte",
-                    help="Fonte di energia"
+                    help="Fonte di Energia"
                 ),
                 percentage_col_name: st.column_config.NumberColumn(
                     "Percentuale",
@@ -1388,9 +1440,10 @@ def bar_chart_with_db(df_prod_pred_updated, df_prod_pred_total, selected_single_
         )
     # Inserisco il grafico nel secondo pannello
     with col2:
-        st.altair_chart(bar, use_container_width=True)
+        st.altair_chart(bar.properties(width=300), use_container_width=True)
 
 ## Barchart consumption ########################################################################################
+##### Devo sistemare il problema del 2022 
 def bar_chart_cons(df_input, df_cons_pred, year, list_consuption):
 
     # Seleziono solo gli stati che mi interessano
@@ -1421,7 +1474,19 @@ def bar_chart_cons(df_input, df_cons_pred, year, list_consuption):
     EU_mean = df_input.filter(pl.col("state") == "EU27_2020", pl.col("date") == year).rename({"energy_cons_per_capita": "europe_mean"}).drop("state", "energy_cons", "population", "predicted", "unique_id")#.item()
 
     # Join tra i due DataFrame
-    stati_bar = stati_bar.join(EU_mean, on = ["date", "nrg_bal"], how = "inner")
+    # Faccio la media dei valori che hanno la stessa data e unique_id così da eliminare doppioni
+    stati_bar = stati_bar.join(EU_mean, on = ["date", "nrg_bal"], how = "inner"
+            ).group_by("unique_id", "state", "nrg_bal", "europe_mean").agg(
+            pl.col("energy_cons_per_capita").mean().alias("energy_cons_per_capita")
+        ).with_columns(
+        nrg_bal = pl.col("nrg_bal")
+        .str.replace("FC_IND_E","Industria")
+        .str.replace("FC_TRA_E","Trasporti")
+        .str.replace("FC_OTH_CP_E","Servizi")
+        .str.replace("FC_OTH_HH_E","Familiare")
+        .str.replace("FC_OTH_AF_E","Agricolo")
+    )
+
     # Creazione del grafico
     bar = alt.Chart(stati_bar).mark_bar(color="lightgray").encode(
         x=alt.X('energy_cons_per_capita:Q', title="Consumo pro-capite di energia"),
@@ -1462,9 +1527,11 @@ def bar_chart_cons(df_input, df_cons_pred, year, list_consuption):
     ).properties(
         width=650, height=80)
 
+
+
     # Creo il grafico facendo il facet per i vari tipi di consumo di energia
     faceted_chart = layered_chart.facet(
-        row=alt.Row('nrg_bal:N', title="Tipo di consumo")
+        row=alt.Row('nrg_bal:N', title="Tipo di Settore di consumo")
     )
     faceted_chart 
     
@@ -1484,15 +1551,32 @@ def barchart_classifica(df_input, year):
     # Creazione del DataFrame per la media di consumo medio di energia in Europa
     df_EU = df_input.filter(pl.col("state") == "EU27_2020"
         ).with_columns(
-            deficit=pl.col("deficit") // 27)
-    # Elimino i dati relativi all'Unione Europea
-    df_input = df_input.filter(pl.col("state") != "EU27_2020")
-    # Unisco i due DataFrame
-    df_input = pl.concat([df_input, df_EU])
+            deficit= pl.col("deficit") // 27,
+            deficit_status= pl.lit("EU")
+        )
 
+    # Elimino i dati relativi all'Unione Europea
+    # Aggiungo una nuova colonna chiamata deficit status che mi servirà per colorare il grafico
+    df_input = df_input.filter(pl.col("state") != "EU27_2020").with_columns(
+        pl.when(pl.col("deficit") > 0)
+        .then(pl.lit("Maggiore"))
+        .otherwise(pl.lit("Minore"))
+        .alias("deficit_status"))
+    
+    # Unisco i due DataFrame
+    df_input = pl.concat([df_input, df_EU]).with_columns(
+            state = pl.col("state")
+            .str.replace("EU27_2020","EU")
+        )
     # Definizione di var passaggi intermedi
-    predicate = alt.datum.deficit > 0
-    color = alt.when(predicate).then(alt.value("#117733")).otherwise(alt.value("#5F021F")) # In alternativa: #00FF00 e #D81B60
+    # Definisco la palette dei colori
+    color_palette = alt.Scale(
+        domain=["Maggiore", "EU", "Minore"],
+        range=["#117733", "#003399", "#5F021F"]
+    )
+    # predicate = alt.datum.deficit > 0
+    # color = alt.when(predicate).then(alt.value("#117733")).otherwise(alt.value("#5F021F")) # In alternativa: #00FF00 e #D81B60
+
     select = alt.selection_point(name="select", on="click")
     highlight = alt.selection_point(name="highlight", on="pointerover", empty=False)
 
@@ -1509,7 +1593,7 @@ def barchart_classifica(df_input, year):
     ).encode(
         y=alt.Y("state", sort="-x", axis=None),#.axis(labels=False, ),
         x=alt.X("deficit:Q", title=None).axis(labels=False),
-        color=color,
+        color=alt.Color("deficit_status:N", scale=color_palette,legend=None),
         fillOpacity=alt.when(select).then(alt.value(1)).otherwise(alt.value(0.3)),
         strokeWidth=stroke_width,
     ).add_params(select, highlight).properties(width=720)
@@ -1538,21 +1622,24 @@ def page_deficit():
     st.write(f"""    
     In questa pagina vengono analizzati i dati sul deficit/surplus di elettricità in Europa.
     Si vuole evidenziare come i vari stati producono e consumano elettricità.
-    L'analisi è stata effettuata prendendo i dati di produzione e consumo di elettricità dal sito Eurostat. 
+    L'analisi è stata effettuata prendendo i dati di [produzione](https://ec.europa.eu/eurostat/databrowser/product/view/nrg_cb_pem?category=nrg.nrg_quant.nrg_quantm.nrg_cb_m) 
+                                                    e [consumo](https://ec.europa.eu/eurostat/databrowser/view/nrg_cb_e__custom_15038169/default/table?lang=en) di elettricità dal sito Eurostat. 
     """)    
     df_comb = cast_int_deficit(df_A)
     st.divider()
     year_int, year = select_year(df_comb)
+    
     st.divider()
     st.write(f"""### Mappa del deficit/surplus di elettricità in Europa nel {year_int}.""")
     st.write(f"""La mappa va dai colori più scuri degli stati che hanno un surplus di elettricità,
     (ovvero stati che producono più elettricità di quanta ne consumano) ai colori più 
     chiari, ovvero gli stati in deficit (stati che consumano più elettricità di quanta
     ne producono). Si può notare come alcuni paesi (Francia, Svezia e Spagna su tutti) siano quasi sempre quelli con il surplus maggiore. 
-    Si può notare anche l'Italia che al contrario è una nazione stabilmente all'ultimo posto 
+    Al contrario, stabile nelle nazioni con un grosso deficit c'è l'Italia. 
     Però la nazione più interessante è sicuramente la Germania. Andando avanti nel tempo si può 
-    osservare il veloce declino del suo surplus energetico accentuato prababilemnte dal conflitto russo-ucraino.
+    osservare il veloce declino del suo surplus energetico accentuato probabilmente dal conflitto russo-ucraino.
                       """)
+    last_date(df_comb, year)
     mappa(df_comb, year, "TOTAL;FC")
 
     st.write(f"""### Evoluzione del deficit/surplus di elettricità di vari stati europei.""")
@@ -1564,18 +1651,19 @@ def page_deficit():
 
     st.write(f"""### Classifica del deficit/surplus di elettricità in Europa nel {year_int}.""")
     st.write(f"""Classifica del deficit/surplus di elettricità che mostra
-    quali stati dell'Unione Europea sono in postivo e quali in negativo. 
-    Viene anche mostarto il valore medio per l'intera UE. È possible selezionare uno stato in particolare cliccandoci sopra""")
+    quali stati dell'Unione Europea sono in positivo e quali in negativo. 
+    Viene anche mostrato il valore medio per l'intera UE. È possibile selezionare uno stato in particolare cliccandoci sopra.""")
+    last_date(df_cons_pred_A, year)
     barchart_classifica(df_comb, year)
     st.write(f"""### Evolzuione dei primi 5 stati per surplus di elettricità in Europa.""")
     bump_chart(df_comb)
-    st.write(f"""Nell'ultimo grafico le nazioni con il surplus più grande vengono visualizzate in classifica per ogni anni. 
-             Vengono confermate le osservazioni della mappa. Stati come Francia, Svezia e Spagna occupano stabilmetne le prime posizioni.
-             Interesasnte notare come queste tre nazioni molto diverse tra di loro occupino i primi posti. Da un lato abbiamo un paese come la Francia che ha dalla sua 
-             una immensa forza lavoro una produzione di energia elettrica molto elevata dovuta sopratutto dal nucleare. Poi c'è una nazione come la Spagna, 
-             una nazione grande, ma mai consdierata come una grande potenza economica che però ha dalla sua un territorio molto vasto e un entroterra, tolte un paio di città, 
-             quasi totalmente disabitato. Infine abbiamo la Svezia. Una nazione relativamente vasta, ma forte di un aimportante produzione di idroelettrico,
-              che le permette agevolmente di superare il proprio fabbisogno  
+    st.write(f"""Nell'ultimo grafico le nazioni con il surplus più grande vengono visualizzate in classifica per ogni anno. 
+             Vengono confermate le osservazioni della mappa. Stati come Francia, Svezia e Spagna occupano stabilmente le prime posizioni.
+             Interessante notare come queste tre nazioni molto diverse tra di loro occupino i primi posti. Da un lato abbiamo un paese come la Francia che ha dalla sua 
+             un'immensa forza lavoro e una produzione di energia elettrica molto elevata dovuta soprattutto al nucleare. Poi c'è una nazione come la Spagna, 
+             una nazione grande, ma mai considerata come una grande potenza economica che però ha dalla sua un territorio molto vasto e un entroterra, tolte un paio di città, 
+             quasi totalmente disabitato. Infine abbiamo la Svezia. Una nazione relativamente vasta, ma forte di un'importante produzione di idroelettrico,
+              che le permette agevolmente di superare il proprio fabbisogno.  
              """)
     
     
@@ -1596,8 +1684,9 @@ def page_production():
     
     st.write(f"""### Analisi della produzione energetica in Europa nell'anno {year_int}.""")
     st.write(f"""In questa prima parte si può osservare tramite una mappa la quantità di energia elettrica prodotta da ogni stato europeo.
-    È possibile cambiare la fonte tramite lo slide ad inizio pagina. Da questa mappa si possono già fare delle osservazioni sulla produzione di energia. Ad esempio la dipendenza di alcuni stati dalle fonti non rinnovabili e ,nel dettaglio, si può notare il divario di produzione tra i paesi dell'Est e i paesi dell'Ovest in merito alla produzione di energia rinnovabile. 
+    È possibile cambiare la fonte tramite lo slide ad inizio pagina. Da questa mappa si possono già fare delle osservazioni sulla produzione di energia. Ad esempio, la dipendenza di alcuni stati dalle fonti non rinnovabili e, nel dettaglio, si può notare il divario di produzione tra i paesi dell'Est e i paesi dell'Ovest in merito alla produzione di energia rinnovabile. 
     """)
+    last_date(df_prod_pred_A, year)
     mappa(df_prod_pred_A, year, selected_siec)
     st.write(f"""### Evoluzione della produzione energetica da {selected_siec} annuale in Europa.""")
     st.write(f"""Dopo aver osservato quanto produce uno stato in un determinato anno, è possibile osservare l'evolversi di tale produzione in Unione Europea a partire dal 2017.
@@ -1611,8 +1700,8 @@ def page_production():
     st.write(f"""
     Prima di spostarci al grafico successivo, vorrei analizzare velocemente alcuni picchi di produzione di energia.
     Interessante è il confronto tra gli stati che producono energia solo da fossili e rinnovabili (come Italia e Spagna) e stati che usano anche fonti alternative come il nucleare (ad esempio Francia e Svezia).
-    In questi ultimi notiamo che il picco di produzione ha una cadenza annuale e si concentra nei mesi invernali (dove certamente si ha bisogno di più energia). Al contrario in stati come Spagna e Italia questi picchi sembrano essere più semestrali, con il picco più alto che si raggiunge nei mesi estivi (dove il clima è più favorevola alla produzione di energia rinnovabile). 
-    Le cause di questo trend sono sicuramente numerose (come ad esempio il diverso clima), però sicuramente la capacità di produrre energia senza dipendere da eventi metereologici permette ad alcuni stati di concentrare la loro produzione nei mesi in cui se ne ha più bisogno. 
+    In questi ultimi notiamo che il picco di produzione ha una cadenza annuale e si concentra nei mesi invernali (dove certamente si ha bisogno di più energia). Al contrario in stati come Spagna e Italia questi picchi sembrano essere più semestrali, con il picco più alto che si raggiunge nei mesi estivi (dove il clima è più favorevole alla produzione di energia rinnovabile). 
+    Le cause di questo trend sono sicuramente numerose (come ad esempio il diverso clima), però sicuramente la capacità di produrre energia senza dipendere da eventi meteorologici permette ad alcuni stati di concentrare la loro produzione nei mesi in cui se ne ha più bisogno. 
     
     """)
     st.divider() 
@@ -1626,29 +1715,27 @@ def page_production():
     st.divider()
     st.write(f"""### Evoluzione della produzione di energia elettrica in {selected_single_state}""")
     st.write(f"""Ora possiamo osservare come è variata, e come si preveda che vari, la produzione di energia elettrica in un singolo stato europeo.
-             Per permettere una più facile lettura dei dati il grafico mostra solo le macrocategoria di fonti energetiche (rinnovabili, non rinnovabili, nucleare e altro). Inoltre è implementato un tooltip (attivabile con il passaggio del mouse sul grafico) che permette la lettura immediata della quantità di energia prodotta misurata in GWH.
+             Per permettere una più facile lettura dei dati il grafico mostra solo le macrocategorie di fonti energetiche (rinnovabili, non rinnovabili, nucleare e altro). Inoltre è implementato un tooltip (attivabile con il passaggio del mouse sul grafico) che permette la lettura immediata della quantità di energia prodotta misurata in GWH.
     """)
 
     df_prod_pred_updated = area_chart(df_prod_pred, df_prod_pred_total, selected_single_state, prod_list)
     
-    st.write(f"""Nonostante l'intervallo temporale sia piccolo, questo grafico è particolarmente interesante perchè ci permette di vedere come, in questo periodo di mutamenti, ogni stato stia cambiando il proprio modo di produrre energia.
-             Ad esempio, possiamo vedere come la Germania si è adattata a produrre energia dopo la chiusura dei propri reattori nuclueari. 
-             O, al contrario, si può osservare la Francia che, grazie proprio al nucleare e stando alle prevsioni dell'ARIMA, nei prossimi anni sembrerebbe diventare quasi totalmente indipendente dal fossile. 
+    st.write(f"""Nonostante l'intervallo temporale sia piccolo, questo grafico è particolarmente interessante perché ci permette di vedere come, in questo periodo di mutamenti, ogni stato stia cambiando il proprio modo di produrre energia.
+             Ad esempio, possiamo vedere come la Germania si è adattata a produrre energia dopo la chiusura dei propri reattori nucleari. 
+             O, al contrario, si può osservare la Francia che, grazie proprio al nucleare e stando alle previsioni dell'ARIMA, nei prossimi anni sembrerebbe diventare quasi totalmente indipendente dal fossile. 
              Infine, si può osservare come un paese dell'est Europa come la Polonia, fortemente dipendente dal carbone, stia piano piano cambiando il proprio modo di produrre energia, aumentando la sua quota di energia prodotta da fonti rinnovabili.    
     """)
 
-    st.write(df_prod.filter(pl.col("state")=="GR"), df_prod_pred.filter(pl.col("state")=="GR"), df_prod_pred_A.filter(pl.col("state")=="GR"))
-
     st.write(f"""### Analisi della produzione di energia elettrica in {selected_single_state} nell'anno {year_int}""")
-    st.write(f"""Ora possiamo osservare come è variata, e come si preveda che vari, la produzione di energia elettrica in un singolo stato europeo.
-             Per permettere una più facile lettura dei dati il grafico mostra solo le macrocategoria di fonti energetiche (rinnovabili, non rinnovabili, nucleare e altro). Inoltre è implementato un tooltip (attivabile con il passaggio del mouse sul grafico) che permette la lettura immediata della quantità di energia prodotta misurata in GWH.
+    st.write(f"""Ora possiamo osservare come è variata, e come si prevede che vari, la produzione di energia elettrica in un singolo stato europeo.
+             Per permettere una più facile lettura dei dati il grafico mostra solo le macrocategorie di fonti energetiche (rinnovabili, non rinnovabili, nucleare e altro). Inoltre è implementato un tooltip (attivabile con il passaggio del mouse sul grafico) che permette la lettura immediata della quantità di energia prodotta misurata in GWH.
     """)
     bar_chart_with_db(df_prod_pred_updated, df_prod_pred_total,selected_single_state, prod_list_2, year)
 
 
 def page_consumption():
     st.title("Consumo di energia elettrica in Europa")
-    st.write(f"""In questa pagina è possibile analizzare la produzione di energia in Europa. I tipi di consumo di energia elettrica analizzati sono 5 e rappresentano il settore industriale, dei trasporti, agricolo e forestale, dei servizi commerciali e pubblici e il consumo domestico.
+    st.write(f"""In questa pagina è possibile analizzare il consumo di energia in Europa. I tipi di consumo di energia elettrica analizzati sono 5 e rappresentano il settore industriale, dei trasporti, agricolo e forestale, dei servizi commerciali e pubblici e il consumo domestico.
     Nella prima parte della pagina sarà possibile studiare l'evoluzione di tale consumo con la possibilità di concentrarsi prima sul singolo consumo e poi su tutti con la possibilità di fare anche un confronto. 
     Nella seconda parte ci si potrà concentrare invece su un singolo stato.
     È possibile filtrare l'analisi selezionando un tipo di consumo di energia che si vuole analizzare nello specifico o si può lasciare l'opzione di default (consumo totale). Si può anche selezionare un anno specifico. 
@@ -1661,38 +1748,39 @@ def page_consumption():
     year_int, year = select_year(df_cons_pred_A)
     st.divider() 
     st.write(f"""### Analisi del consumo energetico in Europa nell'anno {year_int}.""")
-    st.write(f"""In questa prima parte si può osservare tramite una mappa la quantità di energia elettrica viene consumata da ogni stato europeo in un determinato anno.
+    st.write(f"""In questa prima parte si può osservare tramite una mappa la quantità di energia elettrica consumata da ogni stato europeo in un determinato anno.
     È possibile cambiare il tipo di settore di consumo tramite lo slide ad inizio pagina.
     """)
+    last_date(df_cons_pred_A, year)
     mappa(df_cons_pred_A, year, selected_nrg_bal)    
     st.write(f"""
-    La mappa mostra quello che si potrebbe aspettare: i paesi più grandi e popolosi come Italia, Francia, Germania e Spagna sono quelli che consumano più energia.
-    Un dato interesante lo si osserva se ci si sposta nel consumo relativo al settore agricolo. 
-    Si nota subito infatti l'alto consumo dei Paesi bassi che in alcuni anni riesce ad imporsi come lo stato che consumo più energia elettrica per il settore agricolo.
+    La mappa mostra quello che ci si potrebbe aspettare: i paesi più grandi e popolosi come Italia, Francia, Germania e Spagna sono quelli che consumano più energia.
+    Un dato interessante lo si osserva se ci si sposta nel consumo relativo al settore agricolo. 
+    Si nota subito infatti l'alto consumo dei Paesi Bassi che in alcuni anni riesce ad imporsi come lo stato che consuma più energia elettrica per il settore agricolo.
     """)
     st.write(f"""### Evoluzione del consumo energetico pro-capite in Europa nell'anno {year_int}.""")
-    st.write(f"""Dopo aver osservato quanto produce in assoluto uno stato in un determinato anno, ci concentriamo sul consumo pro-capite. 
+    st.write(f"""Dopo aver osservato quanto consuma in assoluto uno stato in un determinato anno, ci concentriamo sul consumo pro-capite. 
     Il consumo pro-capite ci permette anche di fare un confronto tra i vari stati europei in quanto ci permette di staccarci dal valore assoluto 
     e di vedere quanto inficiano i settori di consumo analizzati sul singolo cittadino. In particolare ci interessa osservare i valori sopra la media europea. 
-    Per fare ciò nel sguente grafico tutti i valori sopra la media dell'UE (linea tratteggiata), sono evidenziati in rosso. 
+    Per fare ciò nel seguente grafico tutti i valori sopra la media dell'UE (linea tratteggiata), sono evidenziati in rosso. 
     Accanto ad ogni barra è inoltre presente l'etichetta dello stato e il valore di consumo pro-capite.
     """)
 
     bar_chart_cons(df_cons_pred_A, df_cons_pred, year, list_consuption) 
     
     st.write(f"""
-    Sfogliando tra gli stati si possono esservare alcuni valori nella norma ae altri un po' sorprendenti. 
+    Sfogliando tra gli stati si possono osservare alcuni valori nella norma e altri un po' sorprendenti. 
     Ad esempio, come ci si poteva aspettare, la Germania sfora la media in ben 4 categorie su 5, 
-    mentre la Francia, nonostante un importante apparato industriale e agricolo, sfora solo nei settori legati alla vita del cittadino, come ad esempio i servizi commerciale e pubblici e nel dato sulle abitazioni.
+    mentre la Francia, nonostante un importante apparato industriale e agricolo, sfora solo nei settori legati alla vita del cittadino, come ad esempio i servizi commerciali e pubblici e nel dato sulle famiglie.
     Non sorprendono neanche i valori elevati nel settore industriale di Belgio e Paesi Bassi che sono paesi piccoli ma densamente popolati.
-    I dati forse più soprendenti forse arrivano dai paesi nordici: a seconda dell'anno che si osserva, mediamente Svezia e Finlandia superano la media europea 4 volte su 5 o addirittura in tutte le categorie. 
-    In particolare, se si va a riprendere il dato sul defict/surplus, si può notare come la Svezia sia stabilmente in surplus (e anche di molto). 
-    Quindi di può dire che, tenendo conto di una popolazione non tropo numerosa e di un territorio comunque vasto e ricco di risorse, ogni cittadino svedese consuma molto di più di un altro cittadino europeo, ma allo stesso tempo riesce anche a produrre abbastanza energia (soprattutto in gran parte da rinnovabili), da rimediare a questo consumo così elevato. 
+    I dati forse più sorprendenti arrivano dai paesi nordici: a seconda dell'anno che si osserva, mediamente Svezia e Finlandia superano la media europea 4 volte su 5 o addirittura in tutte le categorie. 
+    In particolare, se si va a riprendere il dato sul deficit/surplus, si può notare come la Svezia sia stabilmente in surplus (e anche di molto). 
+    Quindi si può dire che, tenendo conto di una popolazione non troppo numerosa e di un territorio comunque vasto e ricco di risorse, ogni cittadino svedese consuma molto di più di un altro cittadino europeo, ma allo stesso tempo riesce anche a produrre abbastanza energia (soprattutto in gran parte da rinnovabili), da rimediare a questo consumo così elevato. 
     """)         
     st.divider() 
     st.write(f"""## Analisi del consumo in un singolo stato.""")
     st.write(f"""Nella seconda parte della pagina è possibile concentrarsi sul consumo energetico di un singolo stato europeo. 
-             In questa parte verranno visualizzati due grafici che ci auteranno a comprendere come varia nel corso degli anni il consumo, 
+             In questa parte verranno visualizzati due grafici che ci aiuteranno a comprendere come varia nel corso degli anni il consumo, 
              quanto una nazione consuma in ogni settore e in che percentuale si divide il consumo in ogni settore rispetto al consumo totale.    
     """)
     st.divider()
@@ -1702,23 +1790,22 @@ def page_consumption():
     st.write(f"""### Evoluzione del consumo di energia elettrica in {selected_single_state}""")
     st.write(f"""Ora possiamo osservare l'andamento passato e futuro del consumo di energia elettrica in un singolo stato europeo.
             Il consumo è stato diviso nelle 5 categorie in analisi e, per comprendere meglio l'incertezza che ci può essere dietro all'analisi, 
-             sono stati aggiunti gli intervalli di confidenza per ogni ogni previsione sul consumo. 
+             sono stati aggiunti gli intervalli di confidenza per ogni previsione sul consumo. 
              Il grafico è stato reso anche interattivo così da permettere di evidenziare un periodo o alcuni settori nello specifico. 
                  """)
 
     df_cons_pred_updated = line_chart_with_IC(df_cons_pred, selected_single_state)
     
-    st.write(f"""In questo grafico le conclusioni possono essere varie, alla fine ogni stato alla sua storia, certamente come ci si può aspettare essendo 
-             l'UE una unione di paesi "avanzati" la maggior parte del consumo è divisa nel settore secondario e terziario come servizi, industria, commercio, ecc..., 
-             mentre altri settori come quelli agricolo è molto ridotto anche in paesi che comunque mantengono un forte settore (come Francia e Italia).
-             
+    st.write(f"""In questo grafico le conclusioni possono essere varie, alla fine ogni stato ha la sua storia. Certamente, come ci si può aspettare essendo 
+             l'UE una unione di paesi "avanzati", la maggior parte del consumo è divisa nel settore secondario e terziario come servizi, industria, commercio, ecc..., 
+             mentre altri settori come quello agricolo sono molto ridotti anche in paesi che comunque mantengono un forte settore (come Francia e Italia).
               """)
     st.write(f"""### Distribuzione del consumo energetico pro-capite in {selected_single_state} nell'anno {year_int}.""")
     st.write(f"""
         Infine viene valutata la fetta che ogni settore di consumo mostrato nel grafico sovrastante occupa sul consumo totale. 
         Per fare ciò è stato implementato il seguente grafico a torta corredato da una tabella con la produzione assoluta e la percentuale che rappresenta sul totale.
-             
-             """)
+    """)
+    selected_nrg_bal = "FC"
     pie_chart(df_cons_pred_updated, selected_single_state, year)
 
 # Visualizzo il pdf, purtropopo la libreria è ancora nuova e la visualizzazione non è perfetta, ma è qualcosa
