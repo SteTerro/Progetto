@@ -423,6 +423,14 @@ def last_date(df_input, date):
     if len(check) != 0: 
         st.warning("Sono presenti valori simulati!")
 
+# Tabella contenente le etichette dei consumi
+def table_cons():
+    data = {
+        'Codice': ['FC','FC_IND_E', 'FC_TRA_E', 'FC_OTH_CP_E', 'FC_OTH_HH_E', 'FC_OTH_AF_E'],
+        'Settore': ['Consumo Totale',' Settore Industriale', ' Settore dei Trasporti', 'Commercio e Servizi pubblici', 'Consumo Familiare', ' Settore Agricolo e Forestale']
+    }
+    st.table(data) 
+
 ## Predizione ##################################################################################################
 # Funzione che permette di fare la predizione della produzione di energia
 # Prende in input l'unique_id dello stato, ovvero lo stato e il tipo di energia prodotta
@@ -857,7 +865,7 @@ def line_chart_prod(df_input, countries, siec):
         # color="state",
         strokeDash=alt.StrokeDash("predicted:N").legend(None)
     )
-        
+
     # Implemento le funzioni grafiche di base
     rect, xrule, text_left, text_right = rect_and_label(stati_line, x_left=-55, x_right=5, y = -145)
 
@@ -1759,12 +1767,12 @@ def page_production():
 
 def page_consumption():
     st.title("Consumo di energia elettrica in Europa")
-    st.write(f"""In questa pagina è possibile analizzare il consumo di energia in Europa. I tipi di consumo di energia elettrica analizzati sono 5 e rappresentano il settore industriale, dei trasporti, agricolo e forestale, dei servizi commerciali e pubblici e il consumo domestico.
+    st.write(f"""In questa pagina è possibile analizzare il consumo di energia in Europa. I tipi di consumo di energia elettrica analizzati sono 5 e rappresentano il settore industriale, dei trasporti, agricolo e forestale, dei servizi commerciali e pubblici e il consumo domestico (visibili in tabella).
     Nella prima parte della pagina sarà possibile studiare l'evoluzione di tale consumo con la possibilità di concentrarsi prima sul singolo consumo e poi su tutti con la possibilità di fare anche un confronto. 
     Nella seconda parte ci si potrà concentrare invece su un singolo stato.
     È possibile filtrare l'analisi selezionando un tipo di consumo di energia che si vuole analizzare nello specifico o si può lasciare l'opzione di default (consumo totale). Si può anche selezionare un anno specifico. 
     """)
-
+    table_cons()
     st.divider() 
     selected_nrg_bal = select_type(df_cons)
     df_cons_pred = pred_cons(selected_nrg_bal)
