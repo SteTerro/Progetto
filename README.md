@@ -2,7 +2,9 @@
 ## 0.1 Introduzione
 ---
 Il seguente progetto ha lo scopo di analizzare il deficit e il surplus di energia elettrica egli stati membri dell'Unione Europea nel tempo, concentrandosi sulla produzione e sul consumo locale, escludendo così fattori esterni come importazioni ed esportazioni di elettricità.
-
+I database in analisi sono i seguenti:
+- Produzione di energia: https://ec.europa.eu/eurostat/databrowser/view/nrg_cb_pem/default/table?lang=en&category=nrg.nrg_quant.nrg_quantm.nrg_cb_m
+- Consumo di energia: https://ec.europa.eu/eurostat/databrowser/view/nrg_cb_e/default/table?lang=en&category=nrg.nrg_quant.nrg_quanta.nrg_cb
 ## 0.2 Come far partire la webapp
 ---
 ### Parte 1: scarica il file
