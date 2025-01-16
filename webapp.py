@@ -11,8 +11,6 @@ url_consumption = "https://ec.europa.eu/eurostat/api/dissemination/sdmx/2.1/data
 url_productivity = "https://ec.europa.eu/eurostat/api/dissemination/sdmx/2.1/data/nrg_cb_pem?format=TSV&compressed=true"
 url_population = "https://ec.europa.eu/eurostat/api/dissemination/sdmx/2.1/data/demo_gind?format=TSV&compressed=true"
 url_pop_pred = "https://ec.europa.eu/eurostat/api/dissemination/sdmx/2.1/data/proj_stp24?format=TSV&compressed=true"
-st.write(f"""
-# Consumo di energia in Europa""")
 
 ## Funzioni lettura DataFrame #################################################################################
 # Lettura DataFrame sulla popolazione degli stati europei
@@ -160,10 +158,11 @@ def get_data_productivity(url):
             .str.replace(":c", "123456789")
             .str.replace(":", "123456789")
             .cast(pl.Float64),
-            unique_id=pl.col("state")+";"+pl.col("siec"),
             state = pl.col("state")
             # Cambio la sigla della Grecia da EL (ISO 3166-1 alpha-2 di Eurostat) in GR (teoricamente più comune)
-            .str.replace("EL", "GR")
+            .str.replace("EL", "GR"),
+            unique_id=(pl.col("state")+";"+pl.col("siec"))
+            .str.replace("EL", "GR"),
         )
         .filter(
             # Seleziono solo i valori maggiori di 0 (non si può produrre energia negativa)
@@ -217,10 +216,11 @@ def get_data_consumption(url):
             # Per un problema di lettura del dato, sostituisco i valori nulli con un valore impossibile
             .str.replace(":", "123456789")
             .cast(pl.Float64),
-            unique_id=pl.col("state")+";"+pl.col("nrg_bal"),
             state = pl.col("state")
             # Cambio la sigla della Grecia da EL (ISO 3166-1 alpha-2 di Eurostat) in GR (teoricamente più comune)
-            .str.replace("EL", "GR")
+            .str.replace("EL", "GR"),
+            unique_id=(pl.col("state")+";"+pl.col("nrg_bal"))
+            .str.replace("EL", "GR"),
         )
         .filter(
             # Elimino valori nulli
@@ -330,14 +330,14 @@ def select_state():
 
 # Funzione che permette di selezionare uno o più stati
 # Possibile anche filtrare la presenza o meno del dato su tutta l'unione europea, default è False, ovvero non presente
-def select_multi_state(df_input, EU = False):
+def select_multi_state(df_input, filter = None, EU = False):
     if EU == False:
         df_input = df_input.filter(pl.col("state") != "EU27_2020")
 
     selected_multi_state = st.multiselect(
         "Seleziona uno o più stati",
         df_input.select("state").unique().sort("state"),
-        default=top4_EU
+        default=get_first_4_countries(df_input, filter=filter)
     )
     return selected_multi_state
 
@@ -363,21 +363,26 @@ def select_year(df_input):
     last_year = df_input["date"].max().year
     year = st.select_slider(
                 "Seleziona un anno",
-                range(first_year, last_year)
+                range(first_year, last_year),
+                value=2023
             )
     year_datetime = pl.datetime(year, 1, 1)
     return year, year_datetime
 
 # Funzione che permette di ritornare una lista formata dai 5 maggiori stati in base al filtro
 # Al momento non in uso
-def get_first_5_countries(df_input, filter):
+def get_first_4_countries(df_input, filter):
+
+    if filter is None:
+        return top4_EU
+
     if df_input.columns == df_prod.columns:
         x = "energy_prod"
         type = "siec"
     elif df_input.columns == df_cons.columns:
         x = "energy_cons"
         type = "nrg_bal"
-    if df_input.columns == df_prod_pred.columns:
+    if df_input.columns == df_prod_pred_A.columns:
         x = "energy_prod"
         type = "siec"
     elif df_input.columns == df_cons_pred_A.columns:
@@ -389,7 +394,7 @@ def get_first_5_countries(df_input, filter):
 
     country_default = df_input.filter(pl.col(type) == filter).group_by("state").agg(
         pl.sum(x).alias("total_energy")
-    ).sort("total_energy", descending=True).head(5).select("state").to_series()
+    ).sort("total_energy", descending=True).head(4).select("state").to_series()
     return country_default
 
 # Funzione che ritorna l'ultima data presente nel DataFrame
@@ -784,7 +789,7 @@ def mappa(df_input, year, selected_bal):
         clipExtent= [[0, 0], [800, 400]],    # [[left, top], [right, bottom]]
     ).properties(
         #title='Produzione energetica annuale in Europa',
-        width=800, height=400
+        width=790, height=400
     ).encode(tooltip=alt.value(None))
 
     # Creo la mappa con i dati
@@ -796,7 +801,7 @@ def mappa(df_input, year, selected_bal):
         center= [20,50],                     # [lon, lat]
         clipExtent= [[000, 000], [800, 400]],    # [[left, top], [right, bottom]]
     ).properties(
-        width=800, height=400
+        width=790, height=400
     ).transform_lookup(
         lookup='id',
         from_=alt.LookupData(source, 'ISO_str', ['state', x]),
@@ -821,14 +826,16 @@ def line_chart_prod(df_input, countries, siec):
 
     # Grafico di base
     line = alt.Chart(stati_line).mark_line(interpolate="basis").encode(
-        x="date",
+        x=alt.X("date"),
         y="energy_prod:Q",
-        color = alt.Color("state:N", scale=alt.Scale(scheme="tableau10")),
+        color = alt.Color("state:N", scale=alt.Scale(scheme="tableau10")).legend(None),
         # color="state",
-        strokeDash="predicted:N"
+        strokeDash=alt.StrokeDash("predicted:N").legend(None)
+    ).properties(
+        title = alt.Title("Produzione energetica in Europa", anchor='middle')
     )
     
-    rect, xrule, text_left, text_right = rect_and_label(stati_line, x_left=-55, x_right=5, y = -165)
+    rect, xrule, text_left, text_right = rect_and_label(stati_line, x_left=-55, x_right=5, y = -145)
 
 
     # Creazione del cerchio vicino all'etichetta
@@ -841,7 +848,7 @@ def line_chart_prod(df_input, countries, siec):
         groupby=["state"]
     )
     # Creazione dell'etichetta
-    lable_name = lable_circle.mark_text(align="left", dx=4).encode(text="state", color="state:N")
+    lable_name = lable_circle.mark_text(align="left", dx=4, fontSize=14).encode(text="state", color="state:N")
     
     # Selettori trasparenti attraverso il grafico. Questo è ciò che ci dice il valore x del cursore
     nearest = alt.selection_point(nearest=True, on="pointerover",
@@ -900,7 +907,7 @@ def line_chart_prod(df_input, countries, siec):
         # Asse y indipendente così da avere due scale diverse
         y="independent"
     ).properties(
-        width=800, height=400
+        width=750, height=400
     )
     line_chart 
 
@@ -922,14 +929,14 @@ def line_chart_with_IC(df_cons_pred, selected_single_state):
 
     # Grafico di base
     line = alt.Chart(stati_line).mark_line(interpolate="basis").encode(
-        x="date",
-        y="energy_cons:Q",
+        x=alt.X("date", title = "Anno"),
+        y=alt.Y("energy_cons:Q"),
         # color="nrg_bal:N",
-        color = alt.Color("nrg_bal:N", scale=alt.Scale(scheme="category10")),
-        strokeDash="predicted:N"
+        color = alt.Color("nrg_bal:N", scale=alt.Scale(scheme="category10")).legend(orient="top"),
+        strokeDash=alt.StrokeDash("predicted:N").legend(None)
     ).interactive()
 
-    rect, xrule, text_left, text_right = rect_and_label(stati_line, x_left=-55, x_right=5, y = -145)
+    rect, xrule, text_left, text_right = rect_and_label(stati_line, x_left=-55, x_right=5, y = -120)
 
     # Creazione del cerchio vicino all'etichetta
     lable_circle = alt.Chart(stati_line.filter(pl.col("predicted")==True)).mark_circle().encode(
@@ -941,7 +948,7 @@ def line_chart_with_IC(df_cons_pred, selected_single_state):
         groupby=["nrg_bal"],
     )
     # Creazione dell'etichetta
-    lable_name = lable_circle.mark_text(align="left", dx=4).encode(text="nrg_bal", color="nrg_bal:N")
+    lable_name = lable_circle.mark_text(align="left", dx=4, fontSize=14).encode(text="nrg_bal", color="nrg_bal:N")
 
     # Creazione del selettore per il punto più vicino
     nearest = alt.selection_point(nearest=True, on="pointerover",
@@ -971,7 +978,7 @@ def line_chart_with_IC(df_cons_pred, selected_single_state):
     # Creazione della banda dell'intervallo di confidenza
     band = alt.Chart(conf_int).mark_errorband(extent='ci').encode(
         x="date",
-        y=alt.Y("AutoARIMA_low95:Q", title=None),
+        y=alt.Y("AutoARIMA_low95:Q", title="Consumo di Energia in GWH"),
         y2="AutoARIMA_hi95:Q",
         color="nrg_bal:N"
     )
@@ -982,16 +989,16 @@ def line_chart_with_IC(df_cons_pred, selected_single_state):
     ).resolve_scale(
         y="shared"
     ).properties(
-        width=800, height=400
+        width=720, height=400
     )
     line_chart
 
     return df_cons_pred
 
 ## line_chart Deficit ##########################################################################################
-def line_chart_deficit(df_input):
+def line_chart_deficit(df_input, ):
     # Seleziono solo gli stati che mi interessano
-    selected_multi_state = select_multi_state(df_input, False)
+    selected_multi_state = select_multi_state(df_input, filter="TOTAL;FC", EU=False)
     
     # Creazione del DataFrame che verrà utilizzato per il grafico
     stati_line = df_input.filter(
@@ -1001,11 +1008,11 @@ def line_chart_deficit(df_input):
 
     # Grafico di base
     line = alt.Chart(stati_line).mark_line(interpolate="basis").encode(
-        x="date",
-        y="deficit:Q",
+        x=alt.X("date",title=None),
+        y=alt.Y("deficit:Q", title="Deficit/Surplus in GWH"),
         # color="state",
-        color = alt.Color("state:N", scale=alt.Scale(scheme="tableau10")),
-        strokeDash="predicted:N"
+        color = alt.Color("state:N", scale=alt.Scale(scheme="tableau10")).legend(orient="top"),
+        strokeDash=alt.StrokeDash("predicted:N").legend(orient="top", title="Valore predetto")
     )
 
     rect, xrule, text_left, text_right = rect_and_label(stati_line, x_left=-55, x_right=5, y = -145)
@@ -1045,7 +1052,7 @@ def line_chart_deficit(df_input):
         nearest
     )    
     # Disegna una etichette di testo vicino ai punti e evidenzia in base alla selezione
-    text = line.mark_text(align="left", dx=5, dy=-10).encode(
+    text = line.mark_text(align="left", dx=5, dy=-10, fontSize=12).encode(
         text=when_near.then("deficit:Q").otherwise(alt.value(" "))
     )
     # Disegna una linea nella posizione della selezione
@@ -1058,11 +1065,8 @@ def line_chart_deficit(df_input):
     # Creazione del grafico
     line_chart = alt.layer( 
          rect, xrule, yrule, text_left, text_right, lable_circle, lable_name, line, selectors, points, rules, text
-    ).encode(
-            x=alt.X().title("date"),
-            y=alt.Y().title("deficit")
     ).properties(
-        width=800, height=400
+        width=720, height=400
     )
     line_chart
 
@@ -1101,15 +1105,15 @@ def area_chart(df_prod_pred, df_prod_pred_total, selected_single_state, prod_lis
         ).encode(
             x="date:T",
             y=alt.Y("energy_prod:Q").stack(True),
-            color=alt.Color("siec:N", scale = color_palette),
+            color=alt.Color("siec:N", scale = color_palette, title="Tipi di Fonti").legend(orient="top"),
             #color = "siec:N",
     )
     
-    rect, xrule, text_left, text_right = rect_and_label(stati_area, x_left=-55, x_right=5, y = -150)
+    rect, xrule, text_left, text_right = rect_and_label(stati_area, x_left=-55, x_right=5, y = -155)
 
     # Creazione del cerchio vicino all'etichetta
     lable_circle = alt.Chart(stati_area.filter(pl.col("predicted")==True)).mark_circle().encode(
-        alt.X("last_date['date']:T"),
+        alt.X("last_date['date']:T").title(None),
         alt.Y("last_date['energy_prod']:Q").axis(title='Produzione di Energia'),
         color="state:N"
     ).transform_aggregate(
@@ -1117,7 +1121,7 @@ def area_chart(df_prod_pred, df_prod_pred_total, selected_single_state, prod_lis
         groupby=["state"]
     )
     # Creazione dell'etichetta
-    lable_name = lable_circle.mark_text(align="left", dx=60).encode(text="state", color="state:N")
+    lable_name = lable_circle.mark_text(align="left", dx=60,fontSize=14).encode(text="state", color="state:N")
 
     # Creazione del selettore per il punto più vicino
     nearest = alt.selection_point(nearest=True, on="pointerover",
@@ -1159,7 +1163,7 @@ def area_chart(df_prod_pred, df_prod_pred_total, selected_single_state, prod_lis
     area_chart = alt.layer(
         rect, xrule, text_left, text_right,  lable_circle, lable_name, area, points, rules
     ).properties(
-        width=800, height=400
+        width=750, height=450
     ).resolve_scale(
         x="shared"
     )
@@ -1185,12 +1189,12 @@ def bump_chart(df_input):
         stati_rank = pl.concat([stati_rank, stati_sel])
     # stati_rank = stati_rank.select("state", "date", "deficit", "predicted")
 
-    rect, xrule, text_left, text_right = rect_and_label(stati_rank, x_left=-55, x_right=5, y = -105, year_start="2023")
+    rect, xrule, text_left, text_right = rect_and_label(stati_rank, x_left=-55, x_right=5, y = -135, year_start="2023")
 
     ranking_plot = alt.Chart(stati_rank).mark_line(point=True, strokeDash=[4,1]).encode(
-        x=alt.X("date").timeUnit("year").title("date"),
-        y="rank:O",
-        color = alt.Color("state:N", scale=alt.Scale(scheme="tableau10")),
+        x=alt.X("date", title=None).timeUnit("year"),
+        y=alt.Y("rank:O", title="Classifica"),
+        color = alt.Color("state:N", scale=alt.Scale(scheme="tableau10")).legend(orient="top"),
         # strokeDash="predicted:N"
     ).transform_window(
         rank="rank()",
@@ -1211,7 +1215,7 @@ def bump_chart(df_input):
     )
 
     # Draw text labels near the points, and highlight based on selection
-    text = ranking_plot.mark_text(align="left", dx=5, dy=-6).encode(
+    text = ranking_plot.mark_text(align="left", dx=5, dy=-7, fontSize=14).encode(
         text=when_near.then("state:N").otherwise(alt.value(" "))
     )
 
@@ -1225,7 +1229,7 @@ def bump_chart(df_input):
     classifica = alt.layer(
         rect, xrule, ranking_plot, selectors, points, rules, text, text_left, text_right
     ).properties(
-        width=600, height=300
+        width=690, height=400
     )
     classifica
 
@@ -1307,7 +1311,7 @@ def bar_chart_with_db(df_prod_pred_updated, df_prod_pred_total, selected_single_
     bars = alt.Chart(stati_line).mark_bar().encode(
         x=alt.X('state:N').axis(None),
         y=alt.Y('sum(energy_prod):Q').stack('zero').axis(None),
-        color=alt.Color('siec', scale=alt.Scale(scheme='category10')),
+        color=alt.Color('siec', scale=alt.Scale(scheme='category10'), title="Tipi di fonte"),
     )
 
     # Creazione del selettore per il punto più vicino
@@ -1390,8 +1394,8 @@ def bar_chart_with_db(df_prod_pred_updated, df_prod_pred_total, selected_single_
 def bar_chart_cons(df_input, df_cons_pred, year, list_consuption):
 
     # Seleziono solo gli stati che mi interessano
-    selected_multi_state = select_multi_state(df_input, False)
-
+    selected_multi_state = select_multi_state(df_input, filter=None, EU=False)
+    st.write(selected_multi_state)
     # Faccio la previsione per i vari tipi di consumo di energia
     for state in selected_multi_state:
         for consuption in list_consuption:
@@ -1399,29 +1403,28 @@ def bar_chart_cons(df_input, df_cons_pred, year, list_consuption):
     # Trasformo il DataFrame da frequenza mensile a frequenza annuale e faccio il cast ad intero della colonna consumo di energia
     df_input = df_from_M_to_A(df_cons_pred)
     df_input = cast_int_cons(df_input)
-    
+    st.write(df_input)
     # Facendo il join con la popolazione, posso calcolare il consumo di energia procapite
     df_input = df_input.join(pop, on = ["state", "date"], how = "inner"
     ).with_columns(
         energy_cons_per_capita = (pl.col("energy_cons") / pl.col("population")).round(5),
     )
-
+    st.write(df_input)
     # Creazione del DataFrame che verrà utilizzato per il grafico
     stati_bar = df_input.filter(
         pl.col("state").is_in(selected_multi_state),
         pl.col("date") == year,
         pl.col("nrg_bal") != "FC"
         )
-
+    st.write(stati_bar)
     # Creazione del DataFrame per la media di consumo di energia in Europa
     EU_mean = df_input.filter(pl.col("state") == "EU27_2020", pl.col("date") == year).rename({"energy_cons_per_capita": "europe_mean"}).drop("state", "energy_cons", "population", "predicted", "unique_id")#.item()
-    
+
     # Join tra i due DataFrame
     stati_bar = stati_bar.join(EU_mean, on = ["date", "nrg_bal"], how = "inner")
-
     # Creazione del grafico
     bar = alt.Chart(stati_bar).mark_bar(color="lightgray").encode(
-        x=alt.X('energy_cons_per_capita:Q'),
+        x=alt.X('energy_cons_per_capita:Q', title="Consumo pro-capite di energia"),
         y=alt.Y('state:N', sort="-x", axis=None),
     )
 
@@ -1433,35 +1436,35 @@ def bar_chart_cons(df_input, df_cons_pred, year, list_consuption):
     )
 
     # Creo una linea verticale per la media europea
-    xrule = (
+    xrule_EU = (
         alt.Chart(stati_bar)
         .mark_rule(color="black", strokeDash=[1, 1], size=1, opacity=0.4)
         .encode(
-            x="europe_mean:Q"
+            x=alt.X("europe_mean:Q", title="in verticale tratteggiata la media europea")
         )
     ).transform_filter(
         alt.datum.energy_cons_per_capita > alt.datum.europe_mean
     )
 
     # Creo le etichette per i valori e per i nomi degli stati
-    text_energy_cons = bar.mark_text(align='left', dx=30).encode(
+    text_energy_cons = bar.mark_text(align='left', dx=30, fontSize=14).encode(
         text='energy_cons_per_capita:Q',
         # color = "state:N"
         color = alt.Color("state:N", scale=alt.Scale(scheme="tableau10")),
     )
-    text_state = bar.mark_text(align='left', dx=12).encode(
+    text_state = bar.mark_text(align='left', dx=12, fontSize=14).encode(
         text='state:N',
         # color = "state:N"
         color = alt.Color("state:N", scale=alt.Scale(scheme="tableau10")),
     )
     # Creo il grafico
-    layered_chart = alt.layer(bar, text_energy_cons, text_state, highlight, xrule
+    layered_chart = alt.layer(bar, text_energy_cons, text_state, highlight, xrule_EU
     ).properties(
-        width=600, height=80)
+        width=650, height=80)
 
     # Creo il grafico facendo il facet per i vari tipi di consumo di energia
     faceted_chart = layered_chart.facet(
-        row='nrg_bal:N'
+        row=alt.Row('nrg_bal:N', title="Tipo di consumo")
     )
     faceted_chart 
     
@@ -1505,11 +1508,11 @@ def barchart_classifica(df_input, year):
         stroke="black", cursor="pointer"
     ).encode(
         y=alt.Y("state", sort="-x", axis=None),#.axis(labels=False, ),
-        x=alt.X("deficit:Q").axis(labels=False, ),
+        x=alt.X("deficit:Q", title=None).axis(labels=False),
         color=color,
         fillOpacity=alt.when(select).then(alt.value(1)).otherwise(alt.value(0.3)),
         strokeWidth=stroke_width,
-    ).add_params(select, highlight).properties(width=800)
+    ).add_params(select, highlight).properties(width=720)
 
     # Etichette che indicano lo stato e il deficit
     text_deficit = base.mark_text(
@@ -1531,14 +1534,16 @@ def barchart_classifica(df_input, year):
 #Rect deve avere come X date a partire dal databse filtrato
 
 def page_deficit():
-    st.title("Pagina Deficit/Surplus")
+    st.title("Evoluzione del Deficit/Surplus di energia elettrica in Europa")
     st.write(f"""    
     In questa pagina vengono analizzati i dati sul deficit/surplus di elettricità in Europa.
     Si vuole evidenziare come i vari stati producono e consumano elettricità.
     L'analisi è stata effettuata prendendo i dati di produzione e consumo di elettricità dal sito Eurostat. 
     """)    
     df_comb = cast_int_deficit(df_A)
+    st.divider()
     year_int, year = select_year(df_comb)
+    st.divider()
     st.write(f"""### Mappa del deficit/surplus di elettricità in Europa nel {year_int}.""")
     st.write(f"""La mappa va dai colori più scuri degli stati che hanno un surplus di elettricità,
     (ovvero stati che producono più elettricità di quanta ne consumano) ai colori più 
@@ -1562,6 +1567,8 @@ def page_deficit():
     quali stati dell'Unione Europea sono in postivo e quali in negativo. 
     Viene anche mostarto il valore medio per l'intera UE. È possible selezionare uno stato in particolare cliccandoci sopra""")
     barchart_classifica(df_comb, year)
+    st.write(f"""### Evolzuione dei primi 5 stati per surplus di elettricità in Europa.""")
+    bump_chart(df_comb)
     st.write(f"""Nell'ultimo grafico le nazioni con il surplus più grande vengono visualizzate in classifica per ogni anni. 
              Vengono confermate le osservazioni della mappa. Stati come Francia, Svezia e Spagna occupano stabilmetne le prime posizioni.
              Interesasnte notare come queste tre nazioni molto diverse tra di loro occupino i primi posti. Da un lato abbiamo un paese come la Francia che ha dalla sua 
@@ -1570,10 +1577,10 @@ def page_deficit():
              quasi totalmente disabitato. Infine abbiamo la Svezia. Una nazione relativamente vasta, ma forte di un aimportante produzione di idroelettrico,
               che le permette agevolmente di superare il proprio fabbisogno  
              """)
-    bump_chart(df_comb)
+    
     
 def page_production():
-    st.title("Pagina Produzione")
+    st.title("Produzione di energia elettrica in Europa")
     st.write(f"""In questa pagina è possibile analizzare la produzione di energia in Europa. Le fonti di energia disponibili sono 15 tra fonti rinnovabili, non rinnovabili, nucleare e altre fonti.
     Nella prima parte della pagina sarà possibile studiare l'evoluzione della produzione di energia elettrica per tutti gli stati membri dell'unione. Nella seconda parte ci si potrà concentrare su un singolo stato.
     È possibile filtrare l'analisi selezionando un tipo di fonte di energia che si vuole analizzare nello specifico o si può lasciare l'opzione di default (produzione totale). Si può anche selezionare un anno specifico. 
@@ -1598,7 +1605,7 @@ def page_production():
     L'energia visualizzata è quella selezionata nello slide ad inizio pagina.     
     """)
 
-    selected_multi_state = select_multi_state(df_prod_pred_A, False)
+    selected_multi_state = select_multi_state(df_prod_pred_A, filter=selected_siec,EU= False)
     line_chart_prod(df_prod_pred, selected_multi_state, selected_siec)
     
     st.write(f"""
@@ -1628,8 +1635,10 @@ def page_production():
              Ad esempio, possiamo vedere come la Germania si è adattata a produrre energia dopo la chiusura dei propri reattori nuclueari. 
              O, al contrario, si può osservare la Francia che, grazie proprio al nucleare e stando alle prevsioni dell'ARIMA, nei prossimi anni sembrerebbe diventare quasi totalmente indipendente dal fossile. 
              Infine, si può osservare come un paese dell'est Europa come la Polonia, fortemente dipendente dal carbone, stia piano piano cambiando il proprio modo di produrre energia, aumentando la sua quota di energia prodotta da fonti rinnovabili.    
-    
     """)
+
+    st.write(df_prod.filter(pl.col("state")=="GR"), df_prod_pred.filter(pl.col("state")=="GR"), df_prod_pred_A.filter(pl.col("state")=="GR"))
+
     st.write(f"""### Analisi della produzione di energia elettrica in {selected_single_state} nell'anno {year_int}""")
     st.write(f"""Ora possiamo osservare come è variata, e come si preveda che vari, la produzione di energia elettrica in un singolo stato europeo.
              Per permettere una più facile lettura dei dati il grafico mostra solo le macrocategoria di fonti energetiche (rinnovabili, non rinnovabili, nucleare e altro). Inoltre è implementato un tooltip (attivabile con il passaggio del mouse sul grafico) che permette la lettura immediata della quantità di energia prodotta misurata in GWH.
@@ -1638,7 +1647,7 @@ def page_production():
 
 
 def page_consumption():
-    st.title("Pagina Consumo")
+    st.title("Consumo di energia elettrica in Europa")
     st.write(f"""In questa pagina è possibile analizzare la produzione di energia in Europa. I tipi di consumo di energia elettrica analizzati sono 5 e rappresentano il settore industriale, dei trasporti, agricolo e forestale, dei servizi commerciali e pubblici e il consumo domestico.
     Nella prima parte della pagina sarà possibile studiare l'evoluzione di tale consumo con la possibilità di concentrarsi prima sul singolo consumo e poi su tutti con la possibilità di fare anche un confronto. 
     Nella seconda parte ci si potrà concentrare invece su un singolo stato.
@@ -1669,7 +1678,7 @@ def page_consumption():
     Accanto ad ogni barra è inoltre presente l'etichetta dello stato e il valore di consumo pro-capite.
     """)
 
-    bar_chart_cons(df_cons_pred_A, df_cons_pred, year, list_consuption) #DA rimuovere 
+    bar_chart_cons(df_cons_pred_A, df_cons_pred, year, list_consuption) 
     
     st.write(f"""
     Sfogliando tra gli stati si possono esservare alcuni valori nella norma ae altri un po' sorprendenti. 
@@ -1704,7 +1713,12 @@ def page_consumption():
              mentre altri settori come quelli agricolo è molto ridotto anche in paesi che comunque mantengono un forte settore (come Francia e Italia).
              
               """)
-
+    st.write(f"""### Distribuzione del consumo energetico pro-capite in {selected_single_state} nell'anno {year_int}.""")
+    st.write(f"""
+        Infine viene valutata la fetta che ogni settore di consumo mostrato nel grafico sovrastante occupa sul consumo totale. 
+        Per fare ciò è stato implementato il seguente grafico a torta corredato da una tabella con la produzione assoluta e la percentuale che rappresenta sul totale.
+             
+             """)
     pie_chart(df_cons_pred_updated, selected_single_state, year)
 
     # st.write(f"""
