@@ -675,6 +675,52 @@ df_cons_pred_A = df_from_M_to_A(df_cons_pred)
 df_A = get_df_A(df_prod_pred_A, df_cons_pred_A)
 
 ### Grafici ###################################################################################################
+## utils ######################################################################################################
+
+#Funzione che implementa il rettangolo grigio con la rispettiva linea
+# di solito cambia la y e le x rimangono uguali, in ogni caso faccio in modo che volendo posso modificarle tutte e tre 
+def rect_and_label(df_input, y, x_left=-55, x_right=5, year_start = None, year_end=None):
+    # Filtro il database per pendere solo i valori predetti
+    if year_start == None: 
+        df_input = df_input.filter(pl.col("predicted") == True)
+        # Prendo la prima e l'ultima data
+        first_year = df_input["date"].min()
+    else: first_year = year_start
+    last_year = df_input["date"].max()
+    # Dataframe contente inizio e fine del pannello del forecast
+    source_date = [
+        {"start": first_year, "end": last_year},
+    ]
+    source_date_df = pl.DataFrame(source_date)
+
+    # Creazione del rettangolo grigio
+    rect = alt.Chart(source_date_df).mark_rect(color="lightgrey", opacity=0.4).encode(
+        x="start:T",
+        x2="end:T",
+    )
+    
+    # Linea verticale tratteggiata per indicare l'inizio del pannello del forecast
+    xrule = (
+        alt.Chart(source_date_df)
+        .mark_rule(color="grey", strokeDash=[12, 6], size=2, opacity=0.4)
+        .encode(x="start:T")
+    )
+
+    # Creazione del testo per indicare "Valori Reali" e "Forecast"
+    text_left = alt.Chart(source_date_df).mark_text(
+        align="left", dx=x_left, dy=y, color="grey"
+    ).encode(
+        x="start:T",
+        text=alt.value("Valori Reali")
+    )
+    text_right = alt.Chart(source_date_df).mark_text(
+        align="left", dx=x_right, dy=y, color="grey"
+    ).encode(
+        x="start:T",
+        text=alt.value("Forecast")
+    )
+    return rect, xrule, text_left, text_right
+
 ## Mappa ######################################################################################################
 
 # Funzione che crea una mappa 
@@ -781,48 +827,9 @@ def line_chart_prod(df_input, countries, siec):
         # color="state",
         strokeDash="predicted:N"
     )
-    df_pp = stati_line.filter(pl.col("predicted") == True)
-
-    first_year = df_pp["date"].min()
-    last_year = df_pp["date"].max()
-    # Dataframe contente inizio e fine del pannello del forecast
-    source_date = [
-        {"start": first_year, "end": last_year},
-    ]
-    source_date_df = pl.DataFrame(source_date)
-
-    # Dataframe contente inizio e fine del pannello del forecast
-    # source_date = [
-    #     {"start": "2024-10", "end": "2029"},
-    # ]
-    # source_date_df = pl.DataFrame(source_date)
-
-    # Creazione del rettangolo grigio
-    rect = alt.Chart(source_date_df).mark_rect(color="lightgrey", opacity=0.4).encode(
-        x="start:T",
-        x2="end:T",
-    )
     
-    # Linea verticale tratteggiata per indicare l'inizio del pannello del forecast
-    xrule = (
-        alt.Chart(source_date_df)
-        .mark_rule(color="grey", strokeDash=[12, 6], size=2, opacity=0.4)
-        .encode(x="start:T")
-    )
+    rect, xrule, text_left, text_right = rect_and_label(stati_line, x_left=-55, x_right=5, y = -165)
 
-    # Creazione del testo per indicare "Valori Reali" e "Forecast"
-    text_left = alt.Chart(source_date_df).mark_text(
-        align="left", dx=-55, dy=-165, color="grey"
-    ).encode(
-        x="start:T",
-        text=alt.value("Valori Reali")
-    )
-    text_right = alt.Chart(source_date_df).mark_text(
-        align="left", dx=5, dy=-165, color="grey"
-    ).encode(
-        x="start:T",
-        text=alt.value("Forecast")
-    )
 
     # Creazione del cerchio vicino all'etichetta
     lable_circle = alt.Chart(stati_line.filter(pl.col("predicted")==True)).mark_circle().encode(
@@ -910,7 +917,7 @@ def line_chart_with_IC(df_cons_pred, selected_single_state):
     stati_line = df_cons_pred.filter(
         pl.col("state") == selected_single_state,
         pl.col("nrg_bal") != "FC",
-        pl.col("date") > pl.datetime(2010, 1, 1)
+        # pl.col("date") > pl.datetime(2010, 1, 1)
         )
 
     # Grafico di base
@@ -920,40 +927,9 @@ def line_chart_with_IC(df_cons_pred, selected_single_state):
         # color="nrg_bal:N",
         color = alt.Color("nrg_bal:N", scale=alt.Scale(scheme="category10")),
         strokeDash="predicted:N"
-    )
+    ).interactive()
 
-    # Dataframe contente inizio e fine del pannello del forecast
-    source_date = [
-        {"start": "2022", "end": "2026"},
-    ]
-    source_date_df = pl.DataFrame(source_date)
-
-    # Creazione del rettangolo grigio
-    rect = alt.Chart(source_date_df).mark_rect(color="lightgrey", opacity=0.4).encode(
-        x="start:T",
-        x2="end:T",
-    )
-
-    # Linea verticale tratteggiata per indicare l'inizio del pannello del forecast
-    xrule = (
-        alt.Chart(source_date_df)
-        .mark_rule(color="grey", strokeDash=[12, 6], size=2, opacity=0.4)
-        .encode(x="start:T")
-    )
-
-    # Creazione del testo per indicare "Valori Reali" e "Forecast"
-    text_left = alt.Chart(source_date_df).mark_text(
-        align="left", dx=-55, dy=-145, color="grey"
-    ).encode(
-        x="start:T",
-        text=alt.value("Valori Reali")
-    )
-    text_right = alt.Chart(source_date_df).mark_text(
-        align="left", dx=5, dy=-145, color="grey"
-    ).encode(
-        x="start:T",
-        text=alt.value("Forecast")
-    )
+    rect, xrule, text_left, text_right = rect_and_label(stati_line, x_left=-55, x_right=5, y = -145)
 
     # Creazione del cerchio vicino all'etichetta
     lable_circle = alt.Chart(stati_line.filter(pl.col("predicted")==True)).mark_circle().encode(
@@ -1032,45 +1008,14 @@ def line_chart_deficit(df_input):
         strokeDash="predicted:N"
     )
 
-    # Dataframe contente inizio e fine del pannello del forecast
-    source_date = [
-        {"start": "2022", "end": "2027"},
-    ]
-    source_date_df = pl.DataFrame(source_date)
+    rect, xrule, text_left, text_right = rect_and_label(stati_line, x_left=-55, x_right=5, y = -145)
 
-    # Creazione del rettangolo grigio
-    rect = alt.Chart(source_date_df).mark_rect(color="lightgrey", opacity=0.4).encode(
-        x="start:T",
-        x2="end:T",
-    )
-
-    # Linea verticale tratteggiata per indicare l'inizio del pannello del forecast
-    xrule = (
-        alt.Chart(source_date_df)
-        .mark_rule(color="grey", strokeDash=[12, 6], size=2, opacity=0.4)
-        .encode(x="start:T")
-    )
-
+    # Disegno la linea sullo zero
     yrule = (
-        alt.Chart(source_date_df)
-        .mark_rule(color="black", strokeDash=[12, 6], size=2, opacity=0.4)
+        alt.Chart(stati_line)
+        .mark_rule(color="grey", strokeDash=[4, 4], size=2, opacity=0.4)
         .encode(y = alt.datum(0))
     )
-    
-    # Creazione del testo per indicare "Valori Reali" e "Forecast"
-    text_left = alt.Chart(source_date_df).mark_text(
-        align="left", dx=-55, dy=-145, color="grey"
-    ).encode(
-        x="start:T",
-        text=alt.value("Valori Reali")
-    )
-    text_right = alt.Chart(source_date_df).mark_text(
-        align="left", dx=5, dy=-145, color="grey"
-    ).encode(
-        x="start:T",
-        text=alt.value("Forecast")
-    )
-    
     # Creazione del cerchio vicino all'etichetta
     lable_circle = alt.Chart(stati_line.filter(pl.col("predicted")==True)).mark_circle().encode(
         alt.X("last_date['date']:T"),
@@ -1123,7 +1068,7 @@ def line_chart_deficit(df_input):
 
 ## Grafici "Caratteristici" ####################################################################################
 ## Area Chart ##################################################################################################
-def area_chart(df_prod_pred, selected_single_state, prod_list):
+def area_chart(df_prod_pred, df_prod_pred_total, selected_single_state, prod_list):
 
     # Faccio la previsione per i vari tipi di produzione di energia
     df_prod_pred_updated = pl.concat([df_prod_pred, pred_state(selected_single_state)], how="vertical_relaxed")
@@ -1131,11 +1076,11 @@ def area_chart(df_prod_pred, selected_single_state, prod_list):
 
     # Creazione del DataFrame che verrà utilizzato per il grafico
     # Filtro per data, seleziono solo i dati a partire dal 2017 perchè prima di quella data non veniva segnata la produzione di energia rinnovabile 
-    stati_line = df_prod_pred_updated.filter(
+    stati_area = df_prod_pred_updated.filter(
         pl.col("state") == selected_single_state,
         pl.col("siec").is_in(prod_list),
         pl.col("date") > pl.datetime(2017, 1, 1)
-    )
+    ).unique()
 
     color_palette = alt.Scale(
         ## Seleziono le 4 Fonti di energia più generali:
@@ -1148,7 +1093,7 @@ def area_chart(df_prod_pred, selected_single_state, prod_list):
     )
 
     # Grafico di base
-    area = alt.Chart(stati_line
+    area = alt.Chart(stati_area
         ).mark_area(
             opacity=0.5,
             interpolate='step-after',
@@ -1160,40 +1105,10 @@ def area_chart(df_prod_pred, selected_single_state, prod_list):
             #color = "siec:N",
     )
     
-    # Dataframe contente inizio e fine del pannello del forecast
-    source_date = [
-        {"start": "2024-11", "end": "2028-10"},
-    ]
-    source_date_df = pl.DataFrame(source_date)
-
-    # Creazione del rettangolo grigio
-    rect = alt.Chart(stati_line.filter(pl.col("predicted") == True)).mark_rect(color="lightgrey", opacity=0.4).encode(
-        x="date:T",
-        x2="end:T",
-    )    
-    # Linea verticale tratteggiata per indicare l'inizio del pannello del forecast
-    xrule = (
-        alt.Chart(source_date_df)
-        .mark_rule(color="grey", strokeDash=[12, 6], size=2, opacity=0.4)
-        .encode(x="start:T")
-    )
-
-    # Creazione del testo per indicare "Valori Reali" e "Forecast"
-    text_left = alt.Chart(source_date_df).mark_text(
-        align="left", dx=-55, dy=-150, color="grey"
-    ).encode(
-        x="start:T",
-        text=alt.value("Valori Reali")
-    )
-    text_right = alt.Chart(source_date_df).mark_text(
-        align="left", dx=5, dy=-150, color="grey"
-    ).encode(
-        x="start:T",
-        text=alt.value("Forecast")
-    )
+    rect, xrule, text_left, text_right = rect_and_label(stati_area, x_left=-55, x_right=5, y = -150)
 
     # Creazione del cerchio vicino all'etichetta
-    lable_circle = alt.Chart(stati_line.filter(pl.col("predicted")==True)).mark_circle().encode(
+    lable_circle = alt.Chart(stati_area.filter(pl.col("predicted")==True)).mark_circle().encode(
         alt.X("last_date['date']:T"),
         alt.Y("last_date['energy_prod']:Q").axis(title='Produzione di Energia'),
         color="state:N"
@@ -1214,16 +1129,31 @@ def area_chart(df_prod_pred, selected_single_state, prod_list):
         opacity=when_near.then(alt.value(1)).otherwise(alt.value(0))
     )
     
+    filter = selected_single_state + ";" + "TOTAL"
+    total_prod_og = df_prod_pred_total.filter(
+        pl.col("unique_id") == filter, 
+    ).select(pl.col("energy_prod").cast(pl.Int32)
+    ).unique().sum().item()
+
+    total_prod = stati_area["energy_prod"].sum()
+    # st.write(f"Total production: {total_prod}")
+    # st.write(f"Total production original: {total_prod_og}")
+
+    # Se la differenza tra la produzione totale e la produzione totale originale è minore del 0.05% (soglia scelta arbitrariamente da me) mandiamo un messaggio di warning
+    # Purtroppo non sembra funzionare benissimo, alcuni stati come la finlandia non ritornano il messaggio
+    if total_prod < (total_prod_og - 0.05*total_prod_og):
+        st.warning(f"Presenti dati mancanti!")
+
     # Disegna una rules nella posizione della selezione
     # Questa rules contiene le misura della produzione di elettricita' di ogni stato selezionato
-    rules = alt.Chart(stati_line).transform_pivot(
+    rules = alt.Chart(stati_area).transform_pivot(
         "siec",
         value="energy_prod",
         groupby=["date"]
     ).mark_rule(color="gray").encode(
         x="date",
         opacity=when_near.then(alt.value(0.3)).otherwise(alt.value(0)),
-        tooltip=[alt.Tooltip(c, type="quantitative") for c in stati_line["siec"].unique()],
+        tooltip=[alt.Tooltip(c, type="quantitative") for c in stati_area["siec"].unique()],
     ).add_params(nearest)
 
     area_chart = alt.layer(
@@ -1255,37 +1185,7 @@ def bump_chart(df_input):
         stati_rank = pl.concat([stati_rank, stati_sel])
     # stati_rank = stati_rank.select("state", "date", "deficit", "predicted")
 
-    # Dataframe contente inizio e fine del pannello del forecast
-    source_date = [
-        {"start": "2023", "end": "2027"},
-    ]
-    source_date_df = pl.DataFrame(source_date)
-
-    # Creazione del rettangolo grigio
-    rect = alt.Chart(source_date_df).mark_rect(color="lightgrey", opacity=0.4).encode(
-        x="start:T",
-        x2="end:T",
-    )
-
-    # Linea verticale tratteggiata per indicare l'inizio del pannello del forecast
-    xrule = (
-        alt.Chart(source_date_df)
-        .mark_rule(color="grey", strokeDash=[12, 6], size=2, opacity=0.4)
-        .encode(x="start:T")
-    )
-    # Creazione del testo per indicare "Valori Reali" e "Forecast"
-    text_left = alt.Chart(source_date_df).mark_text(
-        align="left", dx=-55, dy=-105, color="grey"
-    ).encode(
-        x="start:T",
-        text=alt.value("Valori Reali")
-    )
-    text_right = alt.Chart(source_date_df).mark_text(
-        align="left", dx=5, dy=-105, color="grey"
-    ).encode(
-        x="start:T",
-        text=alt.value("Forecast")
-    )
+    rect, xrule, text_left, text_right = rect_and_label(stati_rank, x_left=-55, x_right=5, y = -105, year_start="2023")
 
     ranking_plot = alt.Chart(stati_rank).mark_line(point=True, strokeDash=[4,1]).encode(
         x=alt.X("date").timeUnit("year").title("date"),
@@ -1356,7 +1256,6 @@ def pie_chart(df_input, selected_single_state, year):
     ).properties(
         width=600, height=600
     )
-    pie_chart
 
     # Preparo la visualizzazione su due colonne
     # Preparo i nomi delle colonne
@@ -1389,7 +1288,7 @@ def pie_chart(df_input, selected_single_state, year):
         st.altair_chart(pie_chart, use_container_width=True)
 ## Grafico a Barre ############################################################################################
 ## Barchart Production #########################################################################################
-def bar_chart_with_db(df_prod_pred_updated, selected_single_state, prod_list_2, year):
+def bar_chart_with_db(df_prod_pred_updated, df_prod_pred_total, selected_single_state, prod_list_2, year):
     
     # Trasformo il DataFrame da frequenza mensile a frequenza annuale
     df_prod_pred_A_updated = df_from_M_to_A(df_prod_pred_updated)
@@ -1434,21 +1333,20 @@ def bar_chart_with_db(df_prod_pred_updated, selected_single_state, prod_list_2, 
 
     # Valore di confontro per vedere se mancano dati
     # Il valore preso è la produzione totale originale, è stato utilizzato il dataset originale, usato anche per la mappa
-    total_prod_og = df_prod_pred_A.filter(
+    total_prod_og = df_prod_pred_total.filter(
         pl.col("unique_id") == filter, 
         pl.col("date")==year
     ).select(pl.col("energy_prod").cast(pl.Int32)
     ).unique().item()
 
     # Calcola la percentuale totale
-    total_percentage = stati_line["percentage"].sum()
-    #Calcola la produzione totale
+    # total_percentage = stati_line["percentage"].sum()
+    # Calcola la produzione totale
     total_prod = stati_line["energy_prod"].sum()
-    st.write(f"Total percentage: {total_percentage}%")
-    st.write(f"Total production: {total_prod}")
-    st.write(f"Total production original: {total_prod_og}")
+    # st.write(f"Total percentage: {total_percentage}%")
+    # st.write(f"Total production: {total_prod}")
+    # st.write(f"Total production original: {total_prod_og}")
 
-    
     # Se la differenza tra la produzione totale e la produzione totale originale è maggiore o minore del 0.05% (soglia scelta arbitrariamente da me) mandiamo un messaggio di warning
     if total_prod > (total_prod_og + 0.05*total_prod_og):
         extra_percentage = ((total_prod - total_prod_og) / total_prod_og) * 100
@@ -1467,7 +1365,7 @@ def bar_chart_with_db(df_prod_pred_updated, selected_single_state, prod_list_2, 
     # Inserisco i dati nel primo pannello
     with col1:
         st.dataframe(
-            stati_line.sort("siec").pivot(values=["percentage", "energy_prod"], columns="state", index="siec"),
+            stati_line.sort("siec").pivot(values=["percentage", "energy_prod"], on="state", index="siec"),
             column_config={
                 "siec": st.column_config.TextColumn(
                     "Fonte",
@@ -1489,7 +1387,7 @@ def bar_chart_with_db(df_prod_pred_updated, selected_single_state, prod_list_2, 
         st.altair_chart(bar, use_container_width=True)
 
 ## Barchart consumption ########################################################################################
-def bar_chart_cons(df_input, df_cons_pred, year, list_consuption, selected_single_state):
+def bar_chart_cons(df_input, df_cons_pred, year, list_consuption):
 
     # Seleziono solo gli stati che mi interessano
     selected_multi_state = select_multi_state(df_input, False)
@@ -1566,9 +1464,9 @@ def bar_chart_cons(df_input, df_cons_pred, year, list_consuption, selected_singl
         row='nrg_bal:N'
     )
     faceted_chart 
-
+    
     # Ritorno il DataFrame con i nuovi dati predetti del consumo 
-    return df_input    
+    # return df_input    
   
 ## Barchart Classifica Deficit ################################################################################
 def barchart_classifica(df_input, year):
@@ -1645,74 +1543,176 @@ def page_deficit():
     st.write(f"""La mappa va dai colori più scuri degli stati che hanno un surplus di elettricità,
     (ovvero stati che producono più elettricità di quanta ne consumano) ai colori più 
     chiari, ovvero gli stati in deficit (stati che consumano più elettricità di quanta
-    ne producono).
-             """)
+    ne producono). Si può notare come alcuni paesi (Francia, Svezia e Spagna su tutti) siano quasi sempre quelli con il surplus maggiore. 
+    Si può notare anche l'Italia che al contrario è una nazione stabilmente all'ultimo posto 
+    Però la nazione più interessante è sicuramente la Germania. Andando avanti nel tempo si può 
+    osservare il veloce declino del suo surplus energetico accentuato prababilemnte dal conflitto russo-ucraino.
+                      """)
     mappa(df_comb, year, "TOTAL;FC")
 
     st.write(f"""### Evoluzione del deficit/surplus di elettricità di vari stati europei.""")
     st.write(f"""Si passa ora ad osservare come varia la situazione nel tempo. 
     Si può visualizzare un singolo stato o si possono selezionare più stati contemporaneamente, 
-    così da poter confrontare la situazione tra i vari stati.""")
+    così da poter confrontare la situazione tra i vari stati. Il tooltip verticale permette una veloce lettura dei dati. 
+    """)
     line_chart_deficit(df_comb)
 
     st.write(f"""### Classifica del deficit/surplus di elettricità in Europa nel {year_int}.""")
-    st.write(f"""infine la classifica del deficit/surplus di elettricità che mostra quale interamente 
+    st.write(f"""Classifica del deficit/surplus di elettricità che mostra
     quali stati dell'Unione Europea sono in postivo e quali in negativo. 
-    Viene anche mostarto il valore medio per l'intera UE.""")
+    Viene anche mostarto il valore medio per l'intera UE. È possible selezionare uno stato in particolare cliccandoci sopra""")
     barchart_classifica(df_comb, year)
+    st.write(f"""Nell'ultimo grafico le nazioni con il surplus più grande vengono visualizzate in classifica per ogni anni. 
+             Vengono confermate le osservazioni della mappa. Stati come Francia, Svezia e Spagna occupano stabilmetne le prime posizioni.
+             Interesasnte notare come queste tre nazioni molto diverse tra di loro occupino i primi posti. Da un lato abbiamo un paese come la Francia che ha dalla sua 
+             una immensa forza lavoro una produzione di energia elettrica molto elevata dovuta sopratutto dal nucleare. Poi c'è una nazione come la Spagna, 
+             una nazione grande, ma mai consdierata come una grande potenza economica che però ha dalla sua un territorio molto vasto e un entroterra, tolte un paio di città, 
+             quasi totalmente disabitato. Infine abbiamo la Svezia. Una nazione relativamente vasta, ma forte di un aimportante produzione di idroelettrico,
+              che le permette agevolmente di superare il proprio fabbisogno  
+             """)
     bump_chart(df_comb)
     
 def page_production():
     st.title("Pagina Produzione")
-    
+    st.write(f"""In questa pagina è possibile analizzare la produzione di energia in Europa. Le fonti di energia disponibili sono 15 tra fonti rinnovabili, non rinnovabili, nucleare e altre fonti.
+    Nella prima parte della pagina sarà possibile studiare l'evoluzione della produzione di energia elettrica per tutti gli stati membri dell'unione. Nella seconda parte ci si potrà concentrare su un singolo stato.
+    È possibile filtrare l'analisi selezionando un tipo di fonte di energia che si vuole analizzare nello specifico o si può lasciare l'opzione di default (produzione totale). Si può anche selezionare un anno specifico. 
+    """)
+    st.divider() 
     selected_siec = select_type(df_prod)
-
     df_prod_pred = pred_siec(selected_siec).filter(pl.col("date") >= pl.datetime(2017, 1, 1))
     df_prod_pred_A = df_from_M_to_A(df_prod_pred).filter(pl.col("date") >= pl.datetime(2017, 1, 1))
-
+    df_prod_pred_total = df_A.filter(pl.col("siec") == "TOTAL")
     year_int, year = select_year(df_prod_pred_A)
-
+    st.divider() 
     # with my_expander:
     
-    st.write(f"""### Analisi della produzione energetica annuale in Europa.
-    Analisi della produzione tra vari paesi dell'unione
+    st.write(f"""### Analisi della produzione energetica in Europa nell'anno {year_int}.""")
+    st.write(f"""In questa prima parte si può osservare tramite una mappa la quantità di energia elettrica prodotta da ogni stato europeo.
+    È possibile cambiare la fonte tramite lo slide ad inizio pagina. Da questa mappa si possono già fare delle osservazioni sulla produzione di energia. Ad esempio la dipendenza di alcuni stati dalle fonti non rinnovabili e ,nel dettaglio, si può notare il divario di produzione tra i paesi dell'Est e i paesi dell'Ovest in merito alla produzione di energia rinnovabile. 
     """)
-
     mappa(df_prod_pred_A, year, selected_siec)
+    st.write(f"""### Evoluzione della produzione energetica da {selected_siec} annuale in Europa.""")
+    st.write(f"""Dopo aver osservato quanto produce uno stato in un determinato anno, è possibile osservare l'evolversi di tale produzione in Unione Europea a partire dal 2017.
+    Il grafico permette anche la selezione più stati europei in contemporanea così da potermettere un confronto tra di loro e con la media europea, presente in grigio nel grafico (attenzione alle due scale diverse). 
+    L'energia visualizzata è quella selezionata nello slide ad inizio pagina.     
+    """)
 
     selected_multi_state = select_multi_state(df_prod_pred_A, False)
-
     line_chart_prod(df_prod_pred, selected_multi_state, selected_siec)
     
-    st.write(f"""### Analisi della produzione in un singolo stato.
+    st.write(f"""
+    Prima di spostarci al grafico successivo, vorrei analizzare velocemente alcuni picchi di produzione di energia.
+    Interessante è il confronto tra gli stati che producono energia solo da fossili e rinnovabili (come Italia e Spagna) e stati che usano anche fonti alternative come il nucleare (ad esempio Francia e Svezia).
+    In questi ultimi notiamo che il picco di produzione ha una cadenza annuale e si concentra nei mesi invernali (dove certamente si ha bisogno di più energia). Al contrario in stati come Spagna e Italia questi picchi sembrano essere più semestrali, con il picco più alto che si raggiunge nei mesi estivi (dove il clima è più favorevola alla produzione di energia rinnovabile). 
+    Le cause di questo trend sono sicuramente numerose (come ad esempio il diverso clima), però sicuramente la capacità di produrre energia senza dipendere da eventi metereologici permette ad alcuni stati di concentrare la loro produzione nei mesi in cui se ne ha più bisogno. 
+    
+    """)
+    st.divider() 
+    st.write(f"""## Analisi della produzione in un singolo stato.""")
+    st.write(f"""Nella seconda parte della pagina è possibile concentrarsi sulla produzione energetica di un singolos tato europeo. 
+             In questa parte verranno visualizzati due grafici che ci auteranno a comprendere come varia nel corso degli anni la produzione 
+             e quanto ogni singola fonte inficia nel totale della produzione di uno stato.    
+    """)
+    st.divider()
+    selected_single_state = select_state()
+    st.divider()
+    st.write(f"""### Evoluzione della produzione di energia elettrica in {selected_single_state}""")
+    st.write(f"""Ora possiamo osservare come è variata, e come si preveda che vari, la produzione di energia elettrica in un singolo stato europeo.
+             Per permettere una più facile lettura dei dati il grafico mostra solo le macrocategoria di fonti energetiche (rinnovabili, non rinnovabili, nucleare e altro). Inoltre è implementato un tooltip (attivabile con il passaggio del mouse sul grafico) che permette la lettura immediata della quantità di energia prodotta misurata in GWH.
     """)
 
-    selected_single_state = select_state()
+    df_prod_pred_updated = area_chart(df_prod_pred, df_prod_pred_total, selected_single_state, prod_list)
+    
+    st.write(f"""Nonostante l'intervallo temporale sia piccolo, questo grafico è particolarmente interesante perchè ci permette di vedere come, in questo periodo di mutamenti, ogni stato stia cambiando il proprio modo di produrre energia.
+             Ad esempio, possiamo vedere come la Germania si è adattata a produrre energia dopo la chiusura dei propri reattori nuclueari. 
+             O, al contrario, si può osservare la Francia che, grazie proprio al nucleare e stando alle prevsioni dell'ARIMA, nei prossimi anni sembrerebbe diventare quasi totalmente indipendente dal fossile. 
+             Infine, si può osservare come un paese dell'est Europa come la Polonia, fortemente dipendente dal carbone, stia piano piano cambiando il proprio modo di produrre energia, aumentando la sua quota di energia prodotta da fonti rinnovabili.    
+    
+    """)
+    st.write(f"""### Analisi della produzione di energia elettrica in {selected_single_state} nell'anno {year_int}""")
+    st.write(f"""Ora possiamo osservare come è variata, e come si preveda che vari, la produzione di energia elettrica in un singolo stato europeo.
+             Per permettere una più facile lettura dei dati il grafico mostra solo le macrocategoria di fonti energetiche (rinnovabili, non rinnovabili, nucleare e altro). Inoltre è implementato un tooltip (attivabile con il passaggio del mouse sul grafico) che permette la lettura immediata della quantità di energia prodotta misurata in GWH.
+    """)
+    bar_chart_with_db(df_prod_pred_updated, df_prod_pred_total,selected_single_state, prod_list_2, year)
 
-    df_prod_pred_updated = area_chart(df_prod_pred, selected_single_state, prod_list)
-    bar_chart_with_db(df_prod_pred_updated, selected_single_state, prod_list_2, year)
 
 def page_consumption():
     st.title("Pagina Consumo")
-    st.write(f"""### Analisi del consumo di elettricità annuale in Europa.
+    st.write(f"""In questa pagina è possibile analizzare la produzione di energia in Europa. I tipi di consumo di energia elettrica analizzati sono 5 e rappresentano il settore industriale, dei trasporti, agricolo e forestale, dei servizi commerciali e pubblici e il consumo domestico.
+    Nella prima parte della pagina sarà possibile studiare l'evoluzione di tale consumo con la possibilità di concentrarsi prima sul singolo consumo e poi su tutti con la possibilità di fare anche un confronto. 
+    Nella seconda parte ci si potrà concentrare invece su un singolo stato.
+    È possibile filtrare l'analisi selezionando un tipo di consumo di energia che si vuole analizzare nello specifico o si può lasciare l'opzione di default (consumo totale). Si può anche selezionare un anno specifico. 
     """)
-    selected_nrg_bal = select_type(df_cons)
 
+    st.divider() 
+    selected_nrg_bal = select_type(df_cons)
     df_cons_pred = pred_cons(selected_nrg_bal)
     df_cons_pred_A = df_from_M_to_A(df_cons_pred)
-
     year_int, year = select_year(df_cons_pred_A)
+    st.divider() 
+    st.write(f"""### Analisi del consumo energetico in Europa nell'anno {year_int}.""")
+    st.write(f"""In questa prima parte si può osservare tramite una mappa la quantità di energia elettrica viene consumata da ogni stato europeo in un determinato anno.
+    È possibile cambiare il tipo di settore di consumo tramite lo slide ad inizio pagina.
+    """)
     mappa(df_cons_pred_A, year, selected_nrg_bal)    
-    
-    selected_single_state = select_state()
-
-    df_bar_2 = bar_chart_cons(df_cons_pred_A, df_cons_pred, year, list_consuption, selected_single_state) #DA rimuovere 
     st.write(f"""
-    ### Consumo di energia nei vari settori per un singolo stato europeo.
-     """)
+    La mappa mostra quello che si potrebbe aspettare: i paesi più grandi e popolosi come Italia, Francia, Germania e Spagna sono quelli che consumano più energia.
+    Un dato interesante lo si osserva se ci si sposta nel consumo relativo al settore agricolo. 
+    Si nota subito infatti l'alto consumo dei Paesi bassi che in alcuni anni riesce ad imporsi come lo stato che consumo più energia elettrica per il settore agricolo.
+    """)
+    st.write(f"""### Evoluzione del consumo energetico pro-capite in Europa nell'anno {year_int}.""")
+    st.write(f"""Dopo aver osservato quanto produce in assoluto uno stato in un determinato anno, ci concentriamo sul consumo pro-capite. 
+    Il consumo pro-capite ci permette anche di fare un confronto tra i vari stati europei in quanto ci permette di staccarci dal valore assoluto 
+    e di vedere quanto inficiano i settori di consumo analizzati sul singolo cittadino. In particolare ci interessa osservare i valori sopra la media europea. 
+    Per fare ciò nel sguente grafico tutti i valori sopra la media dell'UE (linea tratteggiata), sono evidenziati in rosso. 
+    Accanto ad ogni barra è inoltre presente l'etichetta dello stato e il valore di consumo pro-capite.
+    """)
+
+    bar_chart_cons(df_cons_pred_A, df_cons_pred, year, list_consuption) #DA rimuovere 
+    
+    st.write(f"""
+    Sfogliando tra gli stati si possono esservare alcuni valori nella norma ae altri un po' sorprendenti. 
+    Ad esempio, come ci si poteva aspettare, la Germania sfora la media in ben 4 categorie su 5, 
+    mentre la Francia, nonostante un importante apparato industriale e agricolo, sfora solo nei settori legati alla vita del cittadino, come ad esempio i servizi commerciale e pubblici e nel dato sulle abitazioni.
+    Non sorprendono neanche i valori elevati nel settore industriale di Belgio e Paesi Bassi che sono paesi piccoli ma densamente popolati.
+    I dati forse più soprendenti forse arrivano dai paesi nordici: a seconda dell'anno che si osserva, mediamente Svezia e Finlandia superano la media europea 4 volte su 5 o addirittura in tutte le categorie. 
+    In particolare, se si va a riprendere il dato sul defict/surplus, si può notare come la Svezia sia stabilmente in surplus (e anche di molto). 
+    Quindi di può dire che, tenendo conto di una popolazione non tropo numerosa e di un territorio comunque vasto e ricco di risorse, ogni cittadino svedese consuma molto di più di un altro cittadino europeo, ma allo stesso tempo riesce anche a produrre abbastanza energia (soprattutto in gran parte da rinnovabili), da rimediare a questo consumo così elevato. 
+    """)         
+    st.divider() 
+    st.write(f"""## Analisi del consumo in un singolo stato.""")
+    st.write(f"""Nella seconda parte della pagina è possibile concentrarsi sul consumo energetico di un singolo stato europeo. 
+             In questa parte verranno visualizzati due grafici che ci auteranno a comprendere come varia nel corso degli anni il consumo, 
+             quanto una nazione consuma in ogni settore e in che percentuale si divide il consumo in ogni settore rispetto al consumo totale.    
+    """)
+    st.divider()
+    selected_single_state = select_state()
+    st.divider()
+
+    st.write(f"""### Evoluzione del consumo di energia elettrica in {selected_single_state}""")
+    st.write(f"""Ora possiamo osservare l'andamento passato e futuro del consumo di energia elettrica in un singolo stato europeo.
+            Il consumo è stato diviso nelle 5 categorie in analisi e, per comprendere meglio l'incertezza che ci può essere dietro all'analisi, 
+             sono stati aggiunti gli intervalli di confidenza per ogni ogni previsione sul consumo. 
+             Il grafico è stato reso anche interattivo così da permettere di evidenziare un periodo o alcuni settori nello specifico. 
+                 """)
+
     df_cons_pred_updated = line_chart_with_IC(df_cons_pred, selected_single_state)
-    # bar_chart_cons_single_state(df_bar_2, year, selected_single_state)
+    
+    st.write(f"""In questo grafico le conclusioni possono essere varie, alla fine ogni stato alla sua storia, certamente come ci si può aspettare essendo 
+             l'UE una unione di paesi "avanzati" la maggior parte del consumo è divisa nel settore secondario e terziario come servizi, industria, commercio, ecc..., 
+             mentre altri settori come quelli agricolo è molto ridotto anche in paesi che comunque mantengono un forte settore (come Francia e Italia).
+             
+              """)
+
     pie_chart(df_cons_pred_updated, selected_single_state, year)
+
+    # st.write(f"""
+    # ### Consumo di energia nei vari settori per un singolo stato europeo.
+    #  """)
+    # df_cons_pred_updated = line_chart_with_IC(df_cons_pred, selected_single_state)
+    # bar_chart_cons(, year, selected_single_state)
+    # pie_chart(df_cons_pred_updated, selected_single_state, year)
 
 # Visualizzo il pdf, purtropopo la libreria è ancora nuova e la visualizzazione non è perfetta, ma è qualcosa
 # Non volevo usare un markdown perchè sennò sarebbero scomparse le immagini.
